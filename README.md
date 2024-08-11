@@ -13,6 +13,8 @@ Source code and output for the thesis "Feature Selection for Multi-omics Data" ,
 
 |-\data\sel_features: List of variables selected for each method. Coefficients/Weights are included if possible.
 
-|--\data\sel_features\gene_converted: Gene list converted from to variables selected for each method. Used for pathway analysis.
+||
+ 
+||-\data\sel_features\gene_converted: Gene list converted from to variables selected for each method. Used for pathway analysis.
 
 |-\ data\out_pathway: Pathway analysis results for each method. Not included in the github repository due to large file size. 
