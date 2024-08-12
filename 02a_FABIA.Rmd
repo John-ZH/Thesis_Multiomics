@@ -1,0 +1,979 @@
+---
+title: "FABIA"
+author: "John Zhuang"
+date: "2024-05-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(fabia)
+library(ggplot2)
+library(ggrepel)
+```
+
+```{r}
+data.vertical = readRDS("data/derived/data_vertical_numeric_only.rds")
+```
+
+# 0. Preparation
+
+## a) Check again to reassure if colnames are identical before binding
+```{r}
+#
+identical(colnames(data.vertical$RPPAArray), colnames(data.vertical$RNASeq2GeneNorm))
+identical(colnames(data.vertical$RNASeq2GeneNorm), colnames(data.vertical$miRNASeqGene))
+```
+## b) Merge data into 1 matrix
+```{r}
+data.vert.joined = do.call("rbind", list(data.vertical$RPPAArray, data.vertical$RNASeq2GeneNorm, data.vertical$miRNASeqGene))
+```
+```{r}
+data.fabia = as.matrix(data.vert.joined)
+```
+
+
+# 1. FABIA
+
+## 1 Bicluster
+
+```{r}
+set.seed(42)
+fabia_1 = fabia(data.fabia, p = 1)
+```
+```{r}
+fabia_1
+summary(fabia_1)
+#plot(fabia_1) # Minimum 2 Dimensions needed
+# extractPlot(fabia_1) # Cannot plot loadings & samples
+```
+
+## 2 Biclusters
+```{r}
+set.seed(42)
+fabia_2 = fabia(data.fabia, p = 2)
+```
+
+```{r}
+fabia_2
+summary(fabia_2)
+plot(fabia_2)
+extractPlot(fabia_2)
+```
+
+## 3 Biclusters
+```{r}
+set.seed(42)
+fabia_3 = fabia(data.fabia, p = 3)
+```
+```{r}
+fabia_3
+```
+
+
+```{r}
+summary(fabia_3)
+```
+```{r}
+plot(fabia_3)
+```
+```{r}
+extractPlot(fabia_3)
+```
+
+## 5 Biclusters
+
+```{r}
+set.seed(42)
+fabia_5 = fabia(data.fabia, p = 5)
+```
+
+```{r}
+fabia_5
+summary(fabia_5)
+plot(fabia_5)
+extractPlot(fabia_5)
+```
+
+## 10 Biclusters
+
+```{r}
+set.seed(42)
+fabia_10 = fabia(data.fabia, p = 10)
+```
+
+```{r}
+fabia_10
+summary(fabia_10)
+plot(fabia_10)
+extractPlot(fabia_10)
+```
+
+## 15 Biclusters
+
+```{r}
+set.seed(42)
+fabia_15 = fabia(data.fabia, p = 15)
+```
+
+```{r}
+fabia_15
+summary(fabia_15)
+plot(fabia_15)
+extractPlot(fabia_15)
+```
+
+## 20 Biclusters
+
+```{r}
+set.seed(42)
+fabia_20 = fabia(data.fabia, p = 20)
+```
+```{r}
+fabia_20
+summary(fabia_20)
+```
+
+```{r}
+plot(fabia_20)
+```
+```{r}
+extractPlot(fabia_20)
+```
+
+## 35 Biclusters
+
+```{r}
+set.seed(42)
+fabia_35 = fabia(data.fabia, p = 35)
+```
+
+```{r}
+fabia_35
+summary(fabia_35)
+plot(fabia_35)
+extractPlot(fabia_35)
+```
+
+## 43 Biclusters (Maximum allowed)
+
+```{r}
+set.seed(42)
+fabia_43 = fabia(data.fabia, p = 43)
+```
+
+```{r}
+fabia_43
+summary(fabia_43)
+plot(fabia_43)
+extractPlot(fabia_43)
+```
+```{r}
+fabia_results = list("1bc" = fabia_1,
+                     "2bc" = fabia_2,
+                     "3bc" = fabia_3,
+                     "5bc" = fabia_5,
+                     "10bc" = fabia_10,
+                     "15bc" = fabia_15,
+                     "20bc" = fabia_20,
+                     "35bc" = fabia_35,
+                     "43bc" = fabia_43)
+
+saveRDS(fabia_results, file = "data/out_models/results_fabia.rds")
+```
+
+# 2. Meta Data Exploration
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal.rds")
+meta.data = data.horizontal$colData.selected
+```
+
+
+
+## A. Bicluster Loading & Metadata
+
+```{r}
+bind.Z.meta = function(fabia.result) {
+  Z.df = as.data.frame(t(as.matrix(fabia.result@Z)))
+  if (identical(rownames(Z.df), rownames(meta.data))) {
+    return(cbind(Z.df, meta.data))
+  } else {
+    stop("Z and Meta Data Sample names mismatched!")
+  }
+}
+```
+
+### 1 Bicluster
+
+```{r}
+#Z.df = as.data.frame(t(as.matrix(fabia_1@Z)))
+#identical(rownames(Z.df), rownames(meta.data))
+#df.Zmeta = cbind(Z.df, meta.data)
+#plot(as.data.frame(t(as.matrix(fabia_1@Z))))
+```
+
+Death/Survival time:
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_1), aes(x = patientID, y = bicluster1, color = event_time)) +
+  geom_point() +
+  scale_color_gradient(low = 'green', high = 'red') +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(1-Bicuster FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Vital Status:
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_1), aes(x = patientID, y = bicluster1, color = vital_status)) +
+  geom_point() +
+  scale_color_manual(values = c("blue","red")) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(1-Bicuster FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+### 2 Biclusters
+
+Death/Survival time:
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_2), aes(x = patientID, y = bicluster1, color = event_time)) +
+  geom_point() +
+  scale_color_gradient(low = 'green', high = 'red') +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(2-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_2), aes(x = patientID, y = bicluster2, color = event_time)) +
+  geom_point() +
+  scale_color_gradient(low = 'green', high = 'red') +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(2-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Vital Status:
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_2), aes(x = patientID, y = bicluster1, color = vital_status)) +
+  geom_point() +
+  scale_color_manual(values = c("blue","red")) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(2-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_2), aes(x = patientID, y = bicluster2, color = vital_status)) +
+  geom_point() +
+  scale_color_manual(values = c("blue","red")) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(2-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+### 3 Biclusters
+
+Death/Survival time:
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_3), aes(x = patientID, y = bicluster1, color = event_time)) +
+  geom_point() +
+  scale_color_gradient(low = 'green', high = 'red') +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(3-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_3), aes(x = patientID, y = bicluster2, color = event_time)) +
+  geom_point() +
+  scale_color_gradient(low = 'green', high = 'red') +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(3-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_3), aes(x = patientID, y = bicluster3, color = event_time)) +
+  geom_point() +
+  scale_color_gradient(low = 'green', high = 'red') +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(3-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+Vital Status:
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_3), aes(x = patientID, y = bicluster1, color = vital_status)) +
+  geom_point() +
+  scale_color_manual(values = c("blue","red")) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(3-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_3), aes(x = patientID, y = bicluster2, color = vital_status)) +
+  geom_point() +
+  scale_color_manual(values = c("blue","red")) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(3-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggplot(data = bind.Z.meta(fabia_3), aes(x = patientID, y = bicluster3, color = vital_status)) +
+  geom_point() +
+  scale_color_manual(values = c("blue","red")) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  ggtitle("Biscluster scores of patientIDs \n(3-Bicusters FABIA)") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# 3. Results comparison
+
+## A. Average information content per bicluster
+
+```{r}
+info.content = data.frame(
+  biclusters = c(1,2,3,5,10,15,20,35,43),
+  info.sum = c(fabia_1@avini[2], 
+             fabia_2@avini[3],
+             fabia_3@avini[4],
+             fabia_5@avini[6],
+             fabia_10@avini[11],
+             fabia_15@avini[16],
+             fabia_20@avini[21],
+             fabia_35@avini[36],
+             fabia_43@avini[44])
+)
+```
+
+```{r}
+info.content$info.avg = info.content$info.sum/info.content$biclusters
+```
+
+```{r}
+plot(info.content$biclusters, info.content$info.avg)
+#ggplot(data = BCs, aes(x = biclusters))
+```
+
+## B. Top n% features of each Bicluster
+
+```{r}
+top_x_percent = function(fabia.result, perct = 5, print = T, show.loading = F) {
+  quantile = 1 - perct * 0.01
+  fabia_L = fabia.result@L
+  
+  out.list = vector("list", length = ncol(fabia_L))
+  names(out.list) = colnames(fabia_L)
+  
+  for (i in 1:ncol(fabia_L)) {
+    L_curr = fabia_L[,i]
+    quant = quantile(abs(L_curr), quantile)
+    sel = abs(L_curr) >= quant
+    out.list[[i]] = L_curr[sel]
+    
+    if(print) {
+      print(colnames(fabia_L)[i])
+      if (show.loading) {
+        print(L_curr[sel])
+      } else {
+        print(names(L_curr[sel]))
+      }
+    }
+  }
+  
+  out.list
+}
+
+#boxplot(fabia_1@L)
+```
+
+### Top 5%
+```{r}
+f1_5 = top_x_percent(fabia_1)
+f2_5 = top_x_percent(fabia_2)
+f3_5 = top_x_percent(fabia_3)
+f5_5 = top_x_percent(fabia_5)
+f10_5 = top_x_percent(fabia_10)
+f15_5 = top_x_percent(fabia_15)
+f20_5 = top_x_percent(fabia_20)
+f35_5 = top_x_percent(fabia_35)
+f43_5 = top_x_percent(fabia_43)
+```
+
+```{r}
+top_5_perc_result = list("1bc" = f1_5,
+                         "2bc" = f2_5,
+                         "3bc" = f3_5,
+                         "5bc" = f5_5,
+                         "10bc" = f10_5,
+                         "15bc" = f15_5,
+                         "20bc" = f20_5,
+                         "35bc" = f35_5,
+                         "43bc" = f43_5)
+
+saveRDS(top_5_perc_result, file = "data/sel_features/results_fabia_top_5_percent.rds")
+```
+
+### Top 10%
+
+```{r}
+f1_10 = top_x_percent(fabia_1, perct = 10)
+f2_10 = top_x_percent(fabia_2, perct = 10)
+f3_10 = top_x_percent(fabia_3, perct = 10)
+f5_10 = top_x_percent(fabia_5, perct = 10)
+f10_10 = top_x_percent(fabia_10, perct = 10)
+f15_10 = top_x_percent(fabia_15, perct = 10)
+f20_10 = top_x_percent(fabia_20, perct = 10)
+f35_10 = top_x_percent(fabia_35, perct = 10)
+f43_10 = top_x_percent(fabia_43, perct = 10)
+```
+
+```{r}
+top_10_perc_result = list("1bc" = f1_10,
+                         "2bc" = f2_10,
+                         "3bc" = f3_10,
+                         "5bc" = f5_10,
+                         "10bc" = f10_10,
+                         "15bc" = f15_10,
+                         "20bc" = f20_10,
+                         "35bc" = f35_10,
+                         "43bc" = f43_10)
+
+saveRDS(top_10_perc_result, file = "data/sel_features/results_fabia_top_10_percent.rds")
+```
+
+### Top 25%
+
+```{r}
+f1_25 = top_x_percent(fabia_1, perct = 25, print = F)
+f2_25 = top_x_percent(fabia_2, perct = 25, print = F)
+f3_25 = top_x_percent(fabia_3, perct = 25, print = F)
+f5_25 = top_x_percent(fabia_5, perct = 25, print = F)
+f10_25 = top_x_percent(fabia_10, perct = 25, print = F)
+f15_25 = top_x_percent(fabia_15, perct = 25, print = F)
+f20_25 = top_x_percent(fabia_20, perct = 25, print = F)
+f35_25 = top_x_percent(fabia_35, perct = 25, print = F)
+f43_25 = top_x_percent(fabia_43, perct = 25, print = F)
+```
+
+```{r}
+top_25_perc_result = list("1bc" = f1_25,
+                         "2bc" = f2_25,
+                         "3bc" = f3_25,
+                         "5bc" = f5_25,
+                         "10bc" = f10_25,
+                         "15bc" = f15_25,
+                         "20bc" = f20_25,
+                         "35bc" = f35_25,
+                         "43bc" = f43_25)
+
+saveRDS(top_25_perc_result, file = "data/sel_features/results_fabia_top_25_percent.rds")
+```
+
+## C. Visualization of top x%
+
+Check max and min value of loadings in order to create symmetrical plots:
+
+```{r}
+max_fL = max(max(fabia_1@L),
+             max(fabia_2@L),
+             max(fabia_3@L),
+             max(fabia_5@L),
+             max(fabia_10@L),
+             max(fabia_15@L),
+             max(fabia_20@L),
+             max(fabia_35@L),
+             max(fabia_43@L)
+)
+min_fL = min(min(fabia_1@L),
+             min(fabia_2@L),
+             min(fabia_3@L),
+             min(fabia_5@L),
+             min(fabia_10@L),
+             min(fabia_15@L),
+             min(fabia_20@L),
+             min(fabia_35@L),
+             min(fabia_43@L)
+)
+c(max_fL, min_fL)
+```
+
+The limits of y axis will be (-2.1, 2.1) in order to make them symmetrical.
+
+```{r}
+plot.fabia.topx = function(fabia_result, fabia_top5, fabia_top10, fabia_top25, bc, abs.ymax = 2.1) {
+  total_bc = fabia_result@p1
+  if (bc > total_bc) {
+    stop("Requested bicluster number exceeds the total available biclusters.")
+  }
+  FABIA.L = as.data.frame(fabia_result@L)
+  FABIA.L$var = rownames(FABIA.L)
+  biclusterx = paste("bicluster", bc, sep = "")
+  FABIA.L$top5 = FABIA.L$var %in% names(fabia_top5[[biclusterx]])
+  FABIA.L$top10 = FABIA.L$var %in% names(fabia_top10[[biclusterx]])
+  FABIA.L$top25 = FABIA.L$var %in% names(fabia_top25[[biclusterx]])
+  FABIA.L$top = NA
+  for(i in 1:nrow(FABIA.L)) {
+    if (FABIA.L[i,]$top25 == F) {
+      FABIA.L[i,]$top = NA
+    } else if (FABIA.L[i,]$top10 == F) {
+      FABIA.L[i,]$top = "Top 11% ~ 25%"
+    } else if (FABIA.L[i,]$top5 == F){
+      FABIA.L[i,]$top = "Top 06% ~ 10%"
+    } else {
+      FABIA.L[i,]$top = "Top 05%"
+    }
+  }
+  FABIA.L$dataset = sapply(FABIA.L$var, retrieve.dataset.type)
+  #FABIA.L
+  ggplot(data = FABIA.L, aes_string(x= "var", y = biclusterx, color = "top", shape="dataset")) +
+  geom_point() +
+  #geom_text(nudge_y = .04, alpha = 1, size = 3) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  ggtitle(paste(total_bc , "Biclusters")) +
+  xlab(biclusterx) +
+  ylim(-abs.ymax, abs.ymax)
+  
+  #if (perc5line) {
+  #  perc5 = min(FABIA.L[FABIA.L$top5 == T, biclusterx])
+  #  p = p + geom_hline(yintercept = perc5)
+  #}
+  #p
+}
+
+retrieve.dataset.type = function(var.name) {
+  if (startsWith(var.name, "hsa")) {
+    out = "miRNASeqGene"
+  } else if (endsWith(var.name, "RPPA")) {
+    out = "RPPAArray"
+  } else if (endsWith(var.name, "R2Gn")) {
+    out = "RNASeq2GeneNorm"
+  } else {
+    out = NA
+  }
+  out
+}
+```
+
+### 1 Bicluster
+```{r}
+plot.fabia.topx(fabia_1, f1_5, f1_10, f1_25, 1, abs.ymax = 1)
+```
+
+### 2 Biclusters
+```{r}
+plot.fabia.topx(fabia_2, f2_5, f2_10, f2_25, 1, abs.ymax = 1)
+plot.fabia.topx(fabia_2, f2_5, f2_10, f2_25, 2, abs.ymax = 1)
+```
+
+### 3 Biclusters
+```{r}
+plot.fabia.topx(fabia_3, f3_5, f3_10, f3_25, 1, abs.ymax = 1.5)
+plot.fabia.topx(fabia_3, f3_5, f3_10, f3_25, 2, abs.ymax = 1.5)
+plot.fabia.topx(fabia_3, f3_5, f3_10, f3_25, 3, abs.ymax = 1.5)
+```
+
+### 5 Biclusters
+```{r}
+plot.fabia.topx(fabia_5, f5_5, f5_10, f5_25, 1, abs.ymax = 2)
+plot.fabia.topx(fabia_5, f5_5, f5_10, f5_25, 2, abs.ymax = 2)
+plot.fabia.topx(fabia_5, f5_5, f5_10, f5_25, 3, abs.ymax = 2)
+plot.fabia.topx(fabia_5, f5_5, f5_10, f5_25, 4, abs.ymax = 2)
+plot.fabia.topx(fabia_5, f5_5, f5_10, f5_25, 5, abs.ymax = 2)
+```
+
+### 10 Biclusters
+```{r}
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 1)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 2)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 3)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 4)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 5)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 6)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 7)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 8)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 9)
+plot.fabia.topx(fabia_10, f10_5, f10_10, f10_25, 10)
+```
+
+## D Hard membership by extractBic()
+
+```{r}
+select.by.Bic = function(fabia.result, perct = 5, print = T, show.loading = F) {
+  fabia_L = fabia.result@L
+  
+  out.list = vector("list", length = ncol(fabia_L))
+  names(out.list) = colnames(fabia_L)
+  
+  for (i in 1:ncol(fabia_L)) { # Number of biclusters
+    L_curr = fabia_L[,i]
+    # Biclusters name start with bic entry 2l+1 to 3L
+    sel = which(names(L_curr)  %in% extractBic(fabia.result)$bic[2 * ncol(fabia_L) + i][[1]])
+    out.list[[i]] = L_curr[sel]
+    
+    if(print) {
+      print(colnames(fabia_L)[i])
+      if (show.loading) {
+        print(L_curr[sel])
+      } else {
+        print(names(L_curr[sel]))
+      }
+    }
+  }
+  
+  out.list
+}
+
+#boxplot(fabia_1@L)
+```
+
+```{r}
+f1_bic = select.by.Bic(fabia_1)
+f2_bic = select.by.Bic(fabia_2)
+f3_bic = select.by.Bic(fabia_3)
+f5_bic = select.by.Bic(fabia_5)
+f10_bic = select.by.Bic(fabia_10)
+f15_bic = select.by.Bic(fabia_15)
+f20_bic = select.by.Bic(fabia_20)
+f35_bic = select.by.Bic(fabia_35)
+f43_bic = select.by.Bic(fabia_43)
+```
+
+```{r}
+extracted_by_bic_result = list("1bc" = f1_bic,
+                          "2bc" = f2_bic,
+                         "3bc" = f3_bic,
+                         "5bc" = f5_bic,
+                         "10bc" = f10_bic,
+                         "15bc" = f15_bic,
+                         "20bc" = f20_bic,
+                         "35bc" = f35_bic,
+                         "43bc" = f43_bic)
+
+saveRDS(extracted_by_bic_result, file = "data/sel_features/results_fabia_extracted_by_bic.rds")
+```
+
+plotting:
+
+```{r}
+plot.fabia.selbyBic = function(fabia_result, fabia_bic, bc, abs.ymax = 2.1) {
+  total_bc = fabia_result@p1
+  if (bc > total_bc) {
+    stop("Requested bicluster number exceeds the total available biclusters.")
+  }
+  FABIA.L = as.data.frame(fabia_result@L)
+  FABIA.L$var = rownames(FABIA.L)
+  biclusterx = paste("bicluster", bc, sep = "")
+  FABIA.L$in.bic = FABIA.L$var %in% names(fabia_bic[[biclusterx]])
+
+  FABIA.L$dataset = sapply(FABIA.L$var, retrieve.dataset.type)
+  #FABIA.L
+  ggplot(data = FABIA.L, aes_string(x= "var", y = biclusterx, color = "in.bic", shape="dataset")) +
+  geom_point() +
+  #geom_text(nudge_y = .04, alpha = 1, size = 3) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  ggtitle(paste(total_bc , "Biclusters")) +
+  xlab(biclusterx) +
+  ylim(-abs.ymax, abs.ymax)
+  
+  #if (perc5line) {
+  #  perc5 = min(FABIA.L[FABIA.L$top5 == T, biclusterx])
+  #  p = p + geom_hline(yintercept = perc5)
+  #}
+  #p
+}
+
+```
+
+### 1 Bicluster
+```{r}
+plot.fabia.selbyBic(fabia_1, f1_bic, 1, abs.ymax = 1)
+```
+
+### 2 Biclusters
+```{r}
+plot.fabia.selbyBic(fabia_2, f2_bic, 1, abs.ymax = 1)
+plot.fabia.selbyBic(fabia_2, f2_bic, 2, abs.ymax = 1)
+```
+
+### 3 Biclusters
+```{r}
+plot.fabia.selbyBic(fabia_3, f3_bic, 1, abs.ymax = 1.5)
+plot.fabia.selbyBic(fabia_3, f3_bic, 2, abs.ymax = 1.5)
+plot.fabia.selbyBic(fabia_3, f3_bic, 3, abs.ymax = 1.5)
+```
+
+### 5 Biclusters
+```{r}
+plot.fabia.selbyBic(fabia_5, f5_bic, 1, abs.ymax = 2)
+plot.fabia.selbyBic(fabia_5, f5_bic, 2, abs.ymax = 2)
+plot.fabia.selbyBic(fabia_5, f5_bic, 3, abs.ymax = 2)
+plot.fabia.selbyBic(fabia_5, f5_bic, 4, abs.ymax = 2)
+plot.fabia.selbyBic(fabia_5, f5_bic, 5, abs.ymax = 2)
+```
+
+### 10 Biclusters
+```{r}
+plot.fabia.selbyBic(fabia_10, f10_bic, 1)
+plot.fabia.selbyBic(fabia_10, f10_bic, 2)
+plot.fabia.selbyBic(fabia_10, f10_bic, 3)
+plot.fabia.selbyBic(fabia_10, f10_bic, 4)
+plot.fabia.selbyBic(fabia_10, f10_bic, 5)
+plot.fabia.selbyBic(fabia_10, f10_bic, 6)
+plot.fabia.selbyBic(fabia_10, f10_bic, 7)
+plot.fabia.selbyBic(fabia_10, f10_bic, 8)
+plot.fabia.selbyBic(fabia_10, f10_bic, 9)
+plot.fabia.selbyBic(fabia_10, f10_bic, 10)
+```
+### Manual calculation and display of thres L. 
+
+FABIA does not return the threshold L. We will use the code also used in the ensemble document.
+
+```{r}
+get.FABIA.tL = function(FABIA.result, tZ.FABIA = 0.5) {
+  
+  threasZ.fabia= tZ.FABIA
+
+  tt = 0
+  for (i in 1:ncol(L(FABIA.result))) {
+    tt = tt + sum(L(FABIA.result)[,i]^2) * sum(Z(FABIA.result)[i,]^2)
+  }
+  tt = tt/(as.double(nrow(L(FABIA.result))) * as.double(ncol(L(FABIA.result))) * as.double(ncol(Z(FABIA.result))))
+  threasL.fabia = sqrt(tt) / threasZ.fabia
+  threasL.fabia
+}
+```
+
+```{r}
+print(paste(1, "Bicluster, thresL =", get.FABIA.tL(fabia_1)))
+print(paste(2, "Biclusters, thresL =", get.FABIA.tL(fabia_2)))
+print(paste(3, "Biclusters, thresL =", get.FABIA.tL(fabia_3)))
+print(paste(5, "Biclusters, thresL =", get.FABIA.tL(fabia_5)))
+print(paste(10, "Biclusters, thresL =", get.FABIA.tL(fabia_10)))
+print(paste(15, "Biclusters, thresL =", get.FABIA.tL(fabia_15)))
+print(paste(20, "Biclusters, thresL =", get.FABIA.tL(fabia_20)))
+print(paste(35, "Biclusters, thresL =", get.FABIA.tL(fabia_35)))
+print(paste(43, "Biclusters, thresL =", get.FABIA.tL(fabia_43)))
+
+```
+
+## E Top n% samples for each Bicluster
+
+
+```{r}
+top_x_percent.s = function(fabia.result, perct = 5, print = F, show.factor = F) {
+  quantile = 1 - perct * 0.01
+  fabia_Z = t(fabia.result@Z)
+  
+  out.list = vector("list", length = ncol(fabia_Z))
+  names(out.list) = colnames(fabia_Z)
+  
+  for (i in 1:ncol(fabia_Z)) {
+    Z_curr = fabia_Z[,i]
+    quant = quantile(abs(Z_curr), quantile)
+    sel = abs(Z_curr) >= quant
+    out.list[[i]] = Z_curr[sel]
+    
+    if(print) {
+      print(colnames(fabia_Z)[i])
+      if (show.factor) {
+        print(Z_curr[sel])
+      } else {
+        print(names(Z_curr[sel]))
+      }
+    }
+  }
+  
+  out.list
+}
+
+#boxplot(fabia_1@L)
+```
+
+### Top 5%
+```{r}
+f1_5.s = top_x_percent.s(fabia_1)
+f2_5.s = top_x_percent.s(fabia_2)
+f3_5.s = top_x_percent.s(fabia_3)
+f5_5.s = top_x_percent.s(fabia_5)
+f10_5.s = top_x_percent.s(fabia_10)
+f15_5.s = top_x_percent.s(fabia_15)
+f20_5.s = top_x_percent.s(fabia_20)
+f35_5.s = top_x_percent.s(fabia_35)
+f43_5.s = top_x_percent.s(fabia_43)
+```
+
+### Top 10%
+```{r}
+f1_10.s = top_x_percent.s(fabia_1, perct = 10)
+f2_10.s = top_x_percent.s(fabia_2, perct = 10)
+f3_10.s = top_x_percent.s(fabia_3, perct = 10)
+f5_10.s = top_x_percent.s(fabia_5, perct = 10)
+f10_10.s = top_x_percent.s(fabia_10, perct = 10)
+f15_10.s = top_x_percent.s(fabia_15, perct = 10)
+f20_10.s = top_x_percent.s(fabia_20, perct = 10)
+f35_10.s = top_x_percent.s(fabia_35, perct = 10)
+f43_10.s = top_x_percent.s(fabia_43, perct = 10)
+```
+
+### Top 25%
+```{r}
+f1_25.s = top_x_percent.s(fabia_1, perct = 25)
+f2_25.s = top_x_percent.s(fabia_2, perct = 25)
+f3_25.s = top_x_percent.s(fabia_3, perct = 25)
+f5_25.s = top_x_percent.s(fabia_5, perct = 25)
+f10_25.s = top_x_percent.s(fabia_10, perct = 25)
+f15_25.s = top_x_percent.s(fabia_15, perct = 25)
+f20_25.s = top_x_percent.s(fabia_20, perct = 25)
+f35_25.s = top_x_percent.s(fabia_35, perct = 25)
+f43_25.s = top_x_percent.s(fabia_43, perct = 25)
+```
+
+## C. Visualization of top x% (Max 10 Biclusters)
+
+Check max and min value of loadings in order to create symmetrical plots:
+
+```{r}
+max_fZ_all = max(max(fabia_1@Z),
+             max(fabia_2@Z),
+             max(fabia_3@Z),
+             max(fabia_5@Z),
+             max(fabia_10@Z),
+             max(fabia_15@Z),
+             max(fabia_20@Z),
+             max(fabia_35@Z),
+             max(fabia_43@Z)
+)
+min_fZ_all = min(min(fabia_1@Z),
+             min(fabia_2@Z),
+             min(fabia_3@Z),
+             min(fabia_5@Z),
+             min(fabia_10@Z),
+             min(fabia_15@Z),
+             min(fabia_20@Z),
+             min(fabia_35@Z),
+             min(fabia_43@Z)
+)
+c(max_fZ_all, min_fZ_all)
+```
+
+
+The limits of y axis will be (-5, 5) in order to make them symmetrical.
+
+```{r}
+plot.fabia.topx.s = function(fabia_result, fabia_top5, fabia_top10, fabia_top25, bc, abs.ymax = 5) {
+  total_bc = fabia_result@p1
+  if (bc > total_bc) {
+    stop("Requested bicluster number exceeds the total available biclusters.")
+  }
+  FABIA.Z = as.data.frame(t(fabia_result@Z))
+  FABIA.Z$MID = rownames(FABIA.Z)
+  biclusterx = paste("bicluster", bc, sep = "")
+  FABIA.Z$top5 = FABIA.Z$MID %in% names(fabia_top5[[biclusterx]])
+  FABIA.Z$top10 = FABIA.Z$MID %in% names(fabia_top10[[biclusterx]])
+  FABIA.Z$top25 = FABIA.Z$MID %in% names(fabia_top25[[biclusterx]])
+  FABIA.Z$top = NA
+  for(i in 1:nrow(FABIA.Z)) {
+    if (FABIA.Z[i,]$top25 == F) {
+      FABIA.Z[i,]$top = NA
+    } else if (FABIA.Z[i,]$top10 == F) {
+      FABIA.Z[i,]$top = "Top 11% ~ 25%"
+    } else if (FABIA.Z[i,]$top5 == F){
+      FABIA.Z[i,]$top = "Top 06% ~ 10%"
+    } else {
+      FABIA.Z[i,]$top = "Top 05%"
+    }
+  }
+  #print(FABIA.Z)
+  ggplot(data = FABIA.Z, aes_string(x= "MID", y = biclusterx, color = "top", label = "MID")) +
+  geom_point() +
+  geom_text_repel(data=subset(FABIA.Z, !is.na(top)), alpha = 1, size = 3, fontface = "bold",
+                  force = 200, force_pull = 1,
+                  max.overlaps = 50) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  ggtitle(paste(total_bc , "Biclusters")) +
+  xlab(biclusterx) +
+  ylim(-abs.ymax, abs.ymax)
+  
+  #if (perc5line) {
+  #  perc5 = min(FABIA.L[FABIA.L$top5 == T, biclusterx])
+  #  p = p + geom_hline(yintercept = perc5)
+  #}
+  #p
+}
+
+
+```
+
+### 1 Bicluster
+
+```{r}
+plot.fabia.topx.s(fabia_1, f1_5.s, f1_10.s, f1_25.s, bc = 1)
+```
+
+### 2 Biclusters
+
+```{r}
+plot.fabia.topx.s(fabia_2, f2_5.s, f2_10.s, f2_25.s, bc = 1)
+plot.fabia.topx.s(fabia_2, f2_5.s, f2_10.s, f2_25.s, bc = 2)
+```
+### 3 Biclusters
+
+```{r}
+plot.fabia.topx.s(fabia_3, f3_5.s, f3_10.s, f3_25.s, bc = 1)
+plot.fabia.topx.s(fabia_3, f3_5.s, f3_10.s, f3_25.s, bc = 2)
+plot.fabia.topx.s(fabia_3, f3_5.s, f3_10.s, f3_25.s, bc = 3)
+```
+
+### 5 Biclusters
+
+```{r}
+plot.fabia.topx.s(fabia_5, f5_5.s, f5_10.s, f5_25.s, bc = 1)
+plot.fabia.topx.s(fabia_5, f5_5.s, f5_10.s, f5_25.s, bc = 2)
+plot.fabia.topx.s(fabia_5, f5_5.s, f5_10.s, f5_25.s, bc = 3)
+plot.fabia.topx.s(fabia_5, f5_5.s, f5_10.s, f5_25.s, bc = 4)
+plot.fabia.topx.s(fabia_5, f5_5.s, f5_10.s, f5_25.s, bc = 5)
+```
+
+### 10 Biclusters
+
+```{r}
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 1)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 2)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 3)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 4)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 5)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 6)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 7)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 8)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 9)
+plot.fabia.topx.s(fabia_10, f10_5.s, f10_10.s, f10_25.s, bc = 10)
+```

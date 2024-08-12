@@ -1,0 +1,419 @@
+---
+title: "Survival Analysis (Cox Model) in Glmnet"
+author: "John Zhuang"
+date: "2024-06-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Data Preparation
+
+```{r}
+library(glmnet)
+```
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_joined.rds")
+```
+
+## A. Make survival outcome matrix for Survival analysis
+
+```{r}
+survival.Y = data.horizontal[, names(data.horizontal) %in% c("vital_status", "event_time")]
+
+names(survival.Y) = c("status", "time") # Rename columns for glmnet compatibility
+survival.Y$status = as.numeric(survival.Y$status) - 1 #Revert to numeric form for glmnet compatibility
+survival.Y = as.matrix(survival.Y)
+```
+
+## B. Make survival independent variable matrix.
+
+Age is the only metadata variable included because glmnet cox regression requires a matrix as input.
+
+```{r}
+survival.X = as.matrix(data.horizontal[,1:997])
+```
+
+
+
+# 1. Cox model survival analysis using Glmnet
+
+```{r}
+## Perform cross validation using glmnet in order to find the best lambda
+## for shrinkage, selection or both.
+
+cox.cv.glm = function(alpha, measure = NA, fold = 10) {
+                    # Column 1000 is vital_status, the disease outcome
+  model = cv.glmnet(x = survival.X, 
+                    y = survival.Y,
+                    alpha = alpha, # 0 for Ridge, 1 for Lasso, 0 < alpha < 1 for Elastic Net
+                    family = "cox", # Survival Analysis
+                    type.measure = measure, # "deviance" for partial-likelihood, "c" for Harrell C index
+                    nfolds = fold,
+                    standardize = T)
+}
+```
+
+## 10 folds
+
+```{r}
+set.seed(42)
+dev.0_10 = cox.cv.glm(0, "deviance")
+dev.0.5_10 = cox.cv.glm(0.5, "deviance")
+dev.1_10 = cox.cv.glm(1, "deviance")
+harrell.0_10 = cox.cv.glm(0, "C")
+harrell.0.5_10 = cox.cv.glm(0.5, "C")
+harrell.1_10 = cox.cv.glm(1, "C")
+```
+
+```{r}
+out.ridge_10 = list("dev" = dev.0_10,
+                "c" = harrell.0_10)
+
+out.elasticnet_10 = list("dev" = dev.0.5_10,
+                "c" = harrell.0.5_10)
+
+out.lasso_10 = list("dev" = dev.1_10,
+                "c" = harrell.1_10)
+
+out.cox.glmnet_10 = list("ridge" = out.ridge_10,
+                 "elasticnet_0.5" = out.elasticnet_10,
+                 "lasso" = out.lasso_10)
+```
+
+```{r}
+saveRDS(out.cox.glmnet_10, file = "data/out_models/results_glmnet_cox_10folds.rds")
+```
+
+## 5 folds
+
+```{r}
+set.seed(42)
+dev.0_5 = cox.cv.glm(0, "deviance", fold = 5)
+dev.0.5_5 = cox.cv.glm(0.5, "deviance", fold = 5)
+dev.1_5 = cox.cv.glm(1, "deviance", fold = 5)
+harrell.0_5 = cox.cv.glm(0, "C", fold = 5)
+harrell.0.5_5 = cox.cv.glm(0.5, "C", fold = 5)
+harrell.1_5 = cox.cv.glm(1, "C", fold = 5)
+```
+
+```{r}
+out.ridge_5 = list("dev" = dev.0_5,
+                "c" = harrell.0_5)
+
+out.elasticnet_5 = list("dev" = dev.0.5_5,
+                "c" = harrell.0.5_5)
+
+out.lasso_5 = list("dev" = dev.1_5,
+                "c" = harrell.1_5)
+
+out.cox.glmnet_5 = list("ridge" = out.ridge_5,
+                 "elasticnet_0.5" = out.elasticnet_5,
+                 "lasso" = out.lasso_5)
+```
+
+```{r}
+saveRDS(out.cox.glmnet_5, file = "data/out_models/results_glmnet_cox_5folds.rds")
+```
+
+## 3 folds
+
+```{r}
+set.seed(42)
+dev.0_3 = cox.cv.glm(0, "deviance", fold = 3)
+dev.0.5_3 = cox.cv.glm(0.5, "deviance", fold = 3)
+dev.1_3 = cox.cv.glm(1, "deviance", fold = 3)
+harrell.0_3 = cox.cv.glm(0, "C", fold = 3)
+harrell.0.5_3 = cox.cv.glm(0.5, "C", fold = 3)
+harrell.1_3 = cox.cv.glm(1, "C", fold = 3)
+```
+
+```{r}
+out.ridge_3 = list("dev" = dev.0_3,
+                "c" = harrell.0_3)
+
+out.elasticnet_3 = list("dev" = dev.0.5_3,
+                "c" = harrell.0.5_3)
+
+out.lasso_3 = list("dev" = dev.1_3,
+                "c" = harrell.1_3)
+
+out.cox.glmnet_3 = list("ridge" = out.ridge_3,
+                 "elasticnet_0.5" = out.elasticnet_3,
+                 "lasso" = out.lasso_3)
+```
+
+```{r}
+saveRDS(out.cox.glmnet_3, file = "data/out_models/results_glmnet_cox_3folds.rds")
+```
+
+# 2. Results Presentation
+
+```{r}
+print.coef = function(cv.glm, coef.num = T) {
+  coef.cv.glm = coef(cv.glm, s="lambda.min") 
+  out = coef.cv.glm[coef.cv.glm[,1] != 0,]
+  if (!coef.num) {
+    out = names(out)
+  }
+  out
+}
+```
+
+## A. 10 folds
+
+### Ridge
+
+```{r}
+plot(dev.0_10)
+title("10-fold CV, alpha = 0", line = 2.5)
+plot(harrell.0_10)
+title("10-fold CV, alpha = 0", line = 2.5)
+```
+
+
+### Elastic Net (Alpha = 0.5)
+
+```{r}
+plot(dev.0.5_10)
+title("10-fold CV, alpha = 0.5", line = 2.5)
+plot(harrell.0.5_10)
+title("10-fold CV, alpha = 0.5", line = 2.5)
+
+print.coef(dev.0.5_10)
+print.coef(harrell.0.5_10)
+```
+
+## Lasso
+
+```{r}
+plot(dev.1_10)
+title("10-fold CV, alpha = 1", line = 2.5)
+plot(harrell.1_10)
+title("10-fold CV, alpha = 1", line = 2.5)
+
+print.coef(dev.1_10)
+print.coef(harrell.1_10)
+```
+
+## B. 5 folds
+
+### Ridge
+
+```{r}
+plot(dev.0_5)
+title("5-fold CV, alpha = 0", line = 2.5)
+plot(harrell.0_5)
+title("5-fold CV, alpha = 0", line = 2.5)
+```
+
+
+### Elastic Net (Alpha = 0.5)
+
+```{r}
+plot(dev.0.5_5)
+title("5-fold CV, alpha = 0.5", line = 2.5)
+plot(harrell.0.5_5)
+title("5-fold CV, alpha = 0.5", line = 2.5)
+
+print.coef(dev.0.5_5)
+print.coef(harrell.0.5_5)
+```
+
+## Lasso
+
+```{r}
+plot(dev.1_5)
+title("5-fold CV, alpha = 1", line = 2.5)
+plot(harrell.1_5)
+title("5-fold CV, alpha = 1", line = 2.5)
+
+print.coef(dev.1_5)
+print.coef(harrell.1_5)
+```
+
+## C. 3 folds
+
+### Ridge
+
+```{r}
+plot(dev.0_3)
+title("3-fold CV, alpha = 0", line = 2.5)
+plot(harrell.0_3)
+title("3-fold CV, alpha = 0", line = 2.5)
+```
+
+
+### Elastic Net (Alpha = 0.5)
+
+```{r}
+plot(dev.0.5_3)
+title("3-fold CV, alpha = 0.5", line = 2.5)
+plot(harrell.0.5_3)
+title("3-fold CV, alpha = 0.5", line = 2.5)
+
+print.coef(dev.0.5_3)
+print.coef(harrell.0.5_3)
+```
+
+## Lasso
+
+```{r}
+plot(dev.1_3)
+title("3-fold CV, alpha = 1", line = 2.5)
+plot(harrell.1_3)
+title("3-fold CV, alpha = 1", line = 2.5)
+
+print.coef(dev.1_3)
+print.coef(harrell.1_3)
+```
+
+Save all coefficients as a separate RDS file for easy access:
+
+```{r}
+
+out.coef.0.5_3 = list("dev" = print.coef(dev.0.5_3),
+                      "c" = print.coef(harrell.0.5_3))
+
+out.coef.1_3 = list("dev" = print.coef(dev.1_3),
+                      "c" = print.coef(harrell.1_3))
+
+out.coef.0.5_5 = list("dev" = print.coef(dev.0.5_5),
+                      "c" = print.coef(harrell.0.5_5))
+
+out.coef.1_5 = list("dev" = print.coef(dev.1_5),
+                      "c" = print.coef(harrell.1_5))
+
+out.coef.0.5_10 = list("dev" = print.coef(dev.0.5_10),
+                      "c" = print.coef(harrell.0.5_10))
+
+out.coef.1_10 = list("dev" = print.coef(dev.1_10),
+                      "c" = print.coef(harrell.1_10))
+
+out.coef.3 = list("elasticnet_0.5" = out.coef.0.5_3,
+                  "lasso" = out.coef.1_3)
+
+out.coef.5 = list("elasticnet_0.5" = out.coef.0.5_5,
+                  "lasso" = out.coef.1_5)
+
+out.coef.10 = list("elasticnet_0.5" = out.coef.0.5_10,
+                  "lasso" = out.coef.1_10)
+
+out.coef = list("fold3" = out.coef.3,
+                "fold5" = out.coef.5,
+                "fold10" = out.coef.10)
+
+saveRDS(out.coef, file = "data/sel_features/results_glmnet_cox_coef.rds")
+```
+
+# 3. 1 standard deviation Lambda
+
+The largest value of lambda such that the error is within 1 standard error of the minimum.
+
+The result might be less sensitive to outsiders.
+
+```{r}
+print.coef.1se = function(cv.glm, coef.num = T) {
+  coef.cv.glm = coef(cv.glm, s="lambda.1se") 
+  out = coef.cv.glm[coef.cv.glm[,1] != 0,]
+  if (!coef.num) {
+    out = names(out)
+  }
+  out
+}
+```
+
+## A. 10 folds
+
+
+### Elastic Net (Alpha = 0.5)
+
+```{r}
+print.coef.1se(dev.0.5_10)
+print.coef.1se(harrell.0.5_10)
+```
+
+## Lasso
+
+```{r}
+print.coef.1se(dev.1_10)
+print.coef.1se(harrell.1_10)
+```
+
+## B. 5 folds
+
+
+### Elastic Net (Alpha = 0.5)
+
+```{r}
+print.coef.1se(dev.0.5_5)
+print.coef.1se(harrell.0.5_5)
+```
+
+## Lasso
+
+```{r}
+
+print.coef.1se(dev.1_5)
+print.coef.1se(harrell.1_5)
+```
+
+## C. 3 folds
+
+### Elastic Net (Alpha = 0.5)
+
+```{r}
+
+print.coef.1se(dev.0.5_3)
+print.coef.1se(harrell.0.5_3)
+```
+
+## Lasso
+
+```{r}
+
+print.coef.1se(dev.1_3)
+print.coef.1se(harrell.1_3)
+```
+
+Save all coefficients as a separate RDS file for easy access:
+
+```{r}
+
+out.coef.0.5_3.1se = list("dev" = print.coef.1se(dev.0.5_3),
+                      "c" = print.coef.1se(harrell.0.5_3))
+
+out.coef.1_3.1se = list("dev" = print.coef.1se(dev.1_3),
+                      "c" = print.coef.1se(harrell.1_3))
+
+out.coef.0.5_5.1se = list("dev" = print.coef.1se(dev.0.5_5),
+                      "c" = print.coef.1se(harrell.0.5_5))
+
+out.coef.1_5.1se = list("dev" = print.coef.1se(dev.1_5),
+                      "c" = print.coef.1se(harrell.1_5))
+
+out.coef.0.5_10.1se = list("dev" = print.coef.1se(dev.0.5_10),
+                      "c" = print.coef.1se(harrell.0.5_10))
+
+out.coef.1_10.1se = list("dev" = print.coef.1se(dev.1_10),
+                      "c" = print.coef.1se(harrell.1_10))
+
+out.coef.3.1se = list("elasticnet_0.5" = out.coef.0.5_3.1se,
+                  "lasso" = out.coef.1_3.1se)
+
+out.coef.5.1se = list("elasticnet_0.5" = out.coef.0.5_5.1se,
+                  "lasso" = out.coef.1_5.1se)
+
+out.coef.10.1se = list("elasticnet_0.5" = out.coef.0.5_10.1se,
+                  "lasso" = out.coef.1_10.1se)
+
+out.coef.1se = list("fold3" = out.coef.3.1se,
+                "fold5" = out.coef.5.1se,
+                "fold10" = out.coef.10.1se)
+
+saveRDS(out.coef.1se, file = "data/sel_features/results_glmnet_cox_coef_1se.rds")
+```
+

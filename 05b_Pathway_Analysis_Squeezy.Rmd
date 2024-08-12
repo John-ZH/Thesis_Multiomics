@@ -1,0 +1,361 @@
+---
+title: "Pathway Analysis for Squeezy"
+author: "John Zhuang"
+date: "2024-06-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(multiMiR)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(stringr)
+library(ggplot2)
+```
+
+# 0. Loading of Results
+
+## A. List of all Gene names in the dataset
+
+```{r}
+gene.names = readRDS("data/derived/unique_gene_names.rds")
+```
+
+## B. Selected Features
+
+```{r}
+results.squeezy = readRDS("data/sel_features/results_squeezy_coef.rds")
+sel.features = results.squeezy
+sel.features
+```
+
+# 1. Convert microRNA to genes
+
+Also remove the ending ".R2Gn" and ".RPPA" from gene names.
+
+
+```{r}
+split.by.omic = function(variable.list) {
+  out.mRSG = variable.list[startsWith(variable.list, "hsa")]
+  out.R2Gn = variable.list[endsWith(variable.list, ".R2Gn")]
+  out.RPPA = variable.list[endsWith(variable.list, ".RPPA")]
+  out = list("miRNASeqGene" = out.mRSG,
+             "RNASeq2GeneNorm" = out.R2Gn,
+             "RPPAArray" = out.RPPA)
+  out
+}
+```
+
+```{r}
+multiomics.to.GENES = function(sel.features, full.search = F, table = "validated", drop.miRNA = F) {
+  multiomics.list = split.by.omic(sel.features)
+  # Convert miRNASeqGene to target GENE names
+  # Skipped and returns an empty list instead of the list of select features,
+  # or if microRNA features are explicitly dropped (drop.miRNA = T).
+  # (Usually done when the features has only a few miRNA and unable to target any genes)
+  if (length(multiomics.list[[1]]) > 0 & !drop.miRNA) {
+    if (!full.search) { # Search only among the 198 genes in ACC, recommended
+    targets= get_multimir(mirna = multiomics.list[[1]], 
+                          target = gene.names,
+                          table = table,
+                          summary = T)
+    mRSG.target.genes = unique(targets@data$target_symbol)
+    } else { # Search the full dataset, not recommended. 
+             # Use only if ACC gene search returns nothing or fails.
+             # Genes not in the ACC genes need to be manually removed.
+    targets= get_multimir(mirna = multiomics.list[[1]], 
+                          table = table,
+                          summary = T)  
+    mRSG.target.genes = unique(targets@data$target_symbol)
+    }
+    
+  } else {
+    mRSG.target.genes = list()
+  }
+  #Remove suffix for Pathway Analysis Compatibility
+  R2Gn.genes = str_remove(multiomics.list[[2]], ".R2Gn")
+  
+  RPPA.genes = str_remove(multiomics.list[[3]], ".RPPA")
+  
+  #Join all cleaned-up genes are remove duplicates.
+  out1 = c(mRSG.target.genes, R2Gn.genes, RPPA.genes)
+  out = as.character(unique(out1))
+  out
+}
+```
+
+```{r}
+geneNames <- list("3F_0.5_Multi"=multiomics.to.GENES(names(sel.features$fold3$elasticnet_0.5$multigroup)),
+                  "3F_0.5_One"=multiomics.to.GENES(names(sel.features$fold3$elasticnet_0.5$onegroup)),
+                  "3F_1_Multi"=multiomics.to.GENES(names(sel.features$fold3$lasso$multigroup)),
+                  "3F_1_One"=multiomics.to.GENES(names(sel.features$fold3$lasso$multigroup)),
+                  
+                  # 5-Fold and 10-Fold CV results are exactly the same as 3-Fold,
+                  # They are kept here for completeness.
+                  "5F_0.5_Multi"=multiomics.to.GENES(names(sel.features$fold5$elasticnet_0.5$multigroup)),
+                  "5F_0.5_One"=multiomics.to.GENES(names(sel.features$fold5$elasticnet_0.5$onegroup)),
+                  "5F_1_Multi"=multiomics.to.GENES(names(sel.features$fold5$lasso$multigroup)),
+                  "5F_1_One"=multiomics.to.GENES(names(sel.features$fold5$lasso$multigroup)),
+                  
+                  "10F_0.5_Multi"=multiomics.to.GENES(names(sel.features$fold10$elasticnet_0.5$multigroup)),
+                  "10F_0.5_One"=multiomics.to.GENES(names(sel.features$fold10$elasticnet_0.5$onegroup)),
+                  "10F_1_Multi"=multiomics.to.GENES(names(sel.features$fold10$lasso$multigroup)),
+                  "10F_1_One"=multiomics.to.GENES(names(sel.features$fold10$lasso$multigroup))
+                  )
+```
+```{r}
+geneNames
+```
+
+
+```{r}
+saveRDS(geneNames, file = "data/sel_features/gene_converted/genes_squeezy.rds")
+```
+
+
+
+# 2. Pathway Analysis
+
+## A. GO Classification
+
+groupGO does not work with Squeey results, as there are too few genes (<=6) selected.
+```{r}
+ggo_MF <- list()#functional profile of a geneset for Molecular Function
+ggo_BP <- list()#functional profile of a geneset for Biological Process
+ggo_CC <- list()#functional profile of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+
+  ggo_MF[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="MF",
+    keyType="SYMBOL",
+    readable=TRUE)
+  
+  ggo_BP[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="BP",
+    keyType="SYMBOL",
+    readable=TRUE)
+
+  ggo_CC[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="CC",
+    keyType="SYMBOL",
+    readable=TRUE)    
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)) {
+  print(head(ggo_MF[[z]]))
+  print(head(ggo_BP[[z]]))
+  print(head(ggo_CC[[z]]))
+}
+```
+```{r}
+barplot(ggo_MF[[1]], title = "groupGO, Molecular Function, \n 3-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_MF[[2]], title = "groupGO, Molecular Function, \n 3-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_MF[[3]], title = "groupGO, Molecular Function, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_MF[[4]], title = "groupGO, Molecular Function, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_MF[[5]], title = "groupGO, Molecular Function, \n 5-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_MF[[6]], title = "groupGO, Molecular Function, \n 5-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_MF[[7]], title = "groupGO, Molecular Function, \n 5-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_MF[[8]], title = "groupGO, Molecular Function, \n 5-Fold CV, alpha = 1, Onegroup")
+barplot(ggo_MF[[9]], title = "groupGO, Molecular Function, \n 10-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_MF[[10]], title = "groupGO, Molecular Function, \n 10-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_MF[[11]], title = "groupGO, Molecular Function, \n 10-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_MF[[12]], title = "groupGO, Molecular Function, \n 10-Fold CV, alpha = 1, Onegroup")
+
+barplot(ggo_BP[[1]], title = "groupGO, Biological Process, \n 3-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_BP[[2]], title = "groupGO, Biological Process, \n 3-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_BP[[3]], title = "groupGO, Biological Process, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_BP[[4]], title = "groupGO, Biological Process, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_BP[[5]], title = "groupGO, Biological Process, \n 5-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_BP[[6]], title = "groupGO, Biological Process, \n 5-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_BP[[7]], title = "groupGO, Biological Process, \n 5-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_BP[[8]], title = "groupGO, Biological Process, \n 5-Fold CV, alpha = 1, Onegroup")
+barplot(ggo_BP[[9]], title = "groupGO, Biological Process, \n 10-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_BP[[10]], title = "groupGO, Biological Process, \n 10-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_BP[[11]], title = "groupGO, Biological Process, \n 10-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_BP[[12]], title = "groupGO, Biological Process, \n 10-Fold CV, alpha = 1, Onegroup")
+
+
+barplot(ggo_CC[[1]], title = "groupGO, Cellular Component, \n 3-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_CC[[2]], title = "groupGO, Cellular Component, \n 3-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_CC[[3]], title = "groupGO, Cellular Component, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_CC[[4]], title = "groupGO, Cellular Component, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_CC[[5]], title = "groupGO, Cellular Component, \n 5-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_CC[[6]], title = "groupGO, Cellular Component, \n 5-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_CC[[7]], title = "groupGO, Cellular Component, \n 5-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_CC[[8]], title = "groupGO, Cellular Component, \n 5-Fold CV, alpha = 1, Onegroup")
+barplot(ggo_CC[[9]], title = "groupGO, Cellular Component, \n 10-Fold CV, alpha = 0.5, Multigroup")
+barplot(ggo_CC[[10]], title = "groupGO, Cellular Component, \n 10-Fold CV, alpha = 0.5, Onegroup")
+barplot(ggo_CC[[11]], title = "groupGO, Cellular Component, \n 10-Fold CV, alpha = 1, Multigroup")
+barplot(ggo_CC[[12]], title = "groupGO, Cellular Component, \n 10-Fold CV, alpha = 1, Onegroup")
+
+```
+
+## B. GO Over-Representation
+
+```{r}
+ego_MF <- list()#GO enrichment of a geneset for Molecular Function
+ego_BP <- list()#GO enrichment of a geneset for Biological Process
+ego_CC <- list()#GO enrichment of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+  ego_MF[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "MF",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_BP[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "BP",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_CC[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "CC",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)){
+  print(head(ego_MF[[z]]))
+  print(head(ego_BP[[z]]))
+  print(head(ego_CC[[z]]))
+}
+```
+
+
+```{r}
+barplot(ego_MF[[1]], title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_MF[[2]], title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_MF[[3]], title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ego_MF[[4]], title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ego_MF[[5]], title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_MF[[6]], title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_MF[[7]], title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 1, Multigroup")
+barplot(ego_MF[[8]], title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 1, Onegroup")
+barplot(ego_MF[[9]], title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_MF[[10]], title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_MF[[11]], title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 1, Multigroup")
+barplot(ego_MF[[12]], title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 1, Onegroup")
+
+barplot(ego_BP[[1]], title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_BP[[2]], title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_BP[[3]], title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ego_BP[[4]], title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ego_BP[[5]], title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_BP[[6]], title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_BP[[7]], title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 1, Multigroup")
+barplot(ego_BP[[8]], title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 1, Onegroup")
+barplot(ego_BP[[9]], title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_BP[[10]], title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_BP[[11]], title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 1, Multigroup")
+barplot(ego_BP[[12]], title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 1, Onegroup")
+
+
+barplot(ego_CC[[1]], title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_CC[[2]], title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_CC[[3]], title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ego_CC[[4]], title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 1, Multigroup")
+barplot(ego_CC[[5]], title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_CC[[6]], title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_CC[[7]], title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 1, Multigroup")
+barplot(ego_CC[[8]], title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 1, Onegroup")
+barplot(ego_CC[[9]], title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 0.5, Multigroup")
+barplot(ego_CC[[10]], title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 0.5, Onegroup")
+barplot(ego_CC[[11]], title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 1, Multigroup")
+barplot(ego_CC[[12]], title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 1, Onegroup")
+
+```
+
+### DAG plots for ego
+
+```{r fig.width=20, fig.height=10}
+goplot(ego_MF[[1]]) + labs(title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_MF[[2]]) + labs(title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_MF[[3]]) + labs(title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 1, Multigroup")
+goplot(ego_MF[[4]]) + labs(title = "enrichGO, Molecular Function, \n 3-Fold CV, alpha = 1, Multigroup")
+goplot(ego_MF[[5]]) + labs(title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_MF[[6]]) + labs(title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_MF[[7]]) + labs(title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 1, Multigroup")
+goplot(ego_MF[[8]]) + labs(title = "enrichGO, Molecular Function, \n 5-Fold CV, alpha = 1, Onegroup")
+goplot(ego_MF[[9]]) + labs(title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_MF[[10]]) + labs(title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_MF[[11]]) + labs(title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 1, Multigroup")
+goplot(ego_MF[[12]]) + labs(title = "enrichGO, Molecular Function, \n 10-Fold CV, alpha = 1, Onegroup")
+
+goplot(ego_BP[[1]]) + labs(title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_BP[[2]]) + labs(title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_BP[[3]]) + labs(title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 1, Multigroup")
+goplot(ego_BP[[4]]) + labs(title = "enrichGO, Biological Process, \n 3-Fold CV, alpha = 1, Multigroup")
+goplot(ego_BP[[5]]) + labs(title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_BP[[6]]) + labs(title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_BP[[7]]) + labs(title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 1, Multigroup")
+goplot(ego_BP[[8]]) + labs(title = "enrichGO, Biological Process, \n 5-Fold CV, alpha = 1, Onegroup")
+goplot(ego_BP[[9]]) + labs(title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_BP[[10]]) + labs(title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_BP[[11]]) + labs(title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 1, Multigroup")
+goplot(ego_BP[[12]]) + labs(title = "enrichGO, Biological Process, \n 10-Fold CV, alpha = 1, Onegroup")
+
+
+goplot(ego_CC[[1]]) + labs(title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_CC[[2]]) + labs(title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_CC[[3]]) + labs(title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 1, Multigroup")
+goplot(ego_CC[[4]]) + labs(title = "enrichGO, Cellular Component, \n 3-Fold CV, alpha = 1, Multigroup")
+goplot(ego_CC[[5]]) + labs(title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_CC[[6]]) + labs(title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_CC[[7]]) + labs(title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 1, Multigroup")
+goplot(ego_CC[[8]]) + labs(title = "enrichGO, Cellular Component, \n 5-Fold CV, alpha = 1, Onegroup")
+goplot(ego_CC[[9]]) + labs(title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 0.5, Multigroup")
+goplot(ego_CC[[10]]) + labs(title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 0.5, Onegroup")
+goplot(ego_CC[[11]]) + labs(title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 1, Multigroup")
+goplot(ego_CC[[12]]) + labs(title = "enrichGO, Cellular Component, \n 10-Fold CV, alpha = 1, Onegroup")
+
+```
+
+# 3. Export Pathway Analysis result to data
+
+```{r}
+pathway = list("ggo_MF" = ggo_MF,
+               "ggo_BP" = ggo_BP,
+               "ggo_CC" = ggo_CC,
+               "ego_MF" = ego_MF,
+               "ego_BP" = ego_BP,
+               "ego_CC" = ego_CC)
+
+saveRDS(pathway, file = "data/out_pathway/pathways_squeezy.rds")
+```
+

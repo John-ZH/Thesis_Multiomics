@@ -1,0 +1,306 @@
+---
+title: "Data Processing"
+author: "John Zhuang"
+date: "2024-05-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(utils)
+library(dplyr)
+library(knitr)
+```
+
+# Read in raw data
+```{r}
+colData = read.table("data/raw/accmatched_colData.tsv")
+gistict = read.table("data/raw/accmatched_gistict.tsv")
+#META_0 = read.table("data/raw/accmatched_META_0.tsv")
+miRNASeqGene = read.table("data/raw/accmatched_miRNASeqGene.tsv")
+Mutations = read.table("data/raw/accmatched_Mutations.tsv")
+RNASeq2GeneNorm = read.table("data/raw/accmatched_RNASeq2GeneNorm.tsv")
+RPPAArray = read.table("data/raw/accmatched_RPPAArray.tsv")
+sampleMap = read.table("data/raw/accmatched_sampleMap.tsv")
+```
+
+# Merge days_to_death and days_to_follow_up into a single variable event_time
+
+```{r}
+colData$event_time = case_when(colData$vital_status == 1 ~ colData$days_to_death,
+                     colData$vital_status == 0 ~ colData$days_to_last_followup)
+```
+
+## For colData, only a small subset of the variables are needed
+
+days_to_death and days_to_follow_up are removed as event_time has replaced them.
+
+```{r}
+col.sel = names(colData)[c(1:3, 31, 6:10,12:18)]
+col.sel
+s.colData = colData[, col.sel]
+```
+
+## Report missing values for all Metadata values:
+
+(Excluding patientID,  "years_to_birth and event_time)
+
+```{r}
+missing.vals = as.data.frame(colSums(is.na(s.colData)))
+names(missing.vals) = "# of Missing Values"
+missing.vals.meta = missing.vals[-c(1,3,4), , drop=F] # Exclude patientID and (survival) response variables.
+kable(missing.vals.meta[order(missing.vals.meta$`# of Missing Values`, decreasing = T), , drop=F], 
+      caption = "Missing values per metadata variable")
+```
+
+
+# Change colnames to patient IDs
+```{r}
+col.to.patient = function(df) {
+  col.orig = names(df)
+  df.name = deparse(substitute(df)) #variable name of dataframe
+  df.sel = sampleMap[sampleMap$assay == df.name, ]
+  col.new = vector(mode="character", length=length(col.orig))
+  for (i in 1:length(col.orig)) {
+    c = col.orig[i]
+    c = gsub(".", "-", c, fixed=T)
+    p = df.sel[df.sel$colname == c,]$primary
+    #print(c)
+    col.new[i] = p
+  }
+  
+  names(df) = col.new
+  df
+}
+```
+
+```{r}
+table(sampleMap$assay)
+```
+
+```{r}
+p.RNASeq2GeneNorm = col.to.patient(RNASeq2GeneNorm)
+p.gistict = col.to.patient(gistict)
+p.RPPAArray = col.to.patient(RPPAArray)
+p.Mutations = col.to.patient(Mutations)
+p.miRNASeqGene = col.to.patient(miRNASeqGene)
+```
+
+# Rename rownames so that they don't conflict when joined
+
+## Extract list of unique gene names before renaming (for pathway analysis purposes)
+
+```{r}
+genes.RNASeq2GeneNorm = rownames(p.RNASeq2GeneNorm)
+genes.gistict = rownames(p.gistict)
+genes.RPPAArray = rownames(p.RPPAArray)
+genes.Mutations = rownames(p.Mutations)
+genes.all = c(genes.RNASeq2GeneNorm, genes.gistict, genes.RPPAArray, genes.Mutations)
+genes.unique = unique(genes.all)
+saveRDS(genes.unique, file = "data/derived/unique_gene_names.rds")
+```
+
+
+```{r}
+rename.gene = function(df, abbrev, row=T) {
+  if (row) {
+    for (i in 1:length(row.names(df))) {
+      row.names(df)[i] = paste(c(row.names(df)[i], abbrev), collapse = ".")
+    }
+  }
+  df
+}
+```
+
+```{r}
+r.RNASeq2GeneNorm = rename.gene(p.RNASeq2GeneNorm, "R2Gn")
+r.gistict = rename.gene(p.gistict, "g")
+r.RPPAArray = rename.gene(p.RPPAArray, "RPPA")
+r.Mutations = rename.gene(p.Mutations, "M")
+
+```
+
+# Check for identical rows (variables) in numeric data
+
+Identical variable rows make data redundant and causes Xtune to fail.
+
+We will check if any columns in the 3 numeric data frames are identical.
+```{r}
+check.identical.rows = function(data) {
+  for (i in 1:(nrow(data) -1)) {
+    for (j in (i+1):nrow(data)) {
+      if (all(data[i,] == data[j,])) {
+        print(rownames(data)[i])
+        print(i)
+        print(rownames(data)[j])
+        print(j)
+      }
+    }
+  }
+}
+```
+
+```{r}
+check.identical.rows(p.miRNASeqGene)
+check.identical.rows(r.RNASeq2GeneNorm)
+check.identical.rows(r.RPPAArray)
+```
+Only the rows "**hsa-mir-517a**" and "**hsa-mir-517b**" in the **miRNASeqGene** dataframe are identical to each other.
+
+"**hsa-mir-517b**" will be removed from the data to avoid duplicates.
+
+```{r}
+nodupe.miRNASeqGene = p.miRNASeqGene[rownames(p.miRNASeqGene) != "hsa-mir-517b",]
+```
+
+
+# Standardize Numerical Data
+
+(Convert to mean 0, sd 1)
+```{r}
+
+sd.RNASeq2GeneNorm = scale(sqrt(r.RNASeq2GeneNorm)) # Sqrt then Standardized
+
+# log transformed, +epsilon added to avoid log(0)
+sd.miRNASeqGene = scale(log2(nodupe.miRNASeqGene + 0.01)) # Log then Standardize 
+
+sd.RPPAArray = scale(r.RPPAArray)
+#apply(sd.RNASeq2GeneNorm, 1, mean)
+#apply(sd.miRNASeqGene, 1, mean)
+```
+
+## Plot Pre and Post-standardization
+
+```{r}
+boxplot(r.RPPAArray, main = "RPPAArray, Raw")
+boxplot(sd.RPPAArray, main = "RPPAArray, Standardized")
+```
+```{r}
+boxplot(r.RNASeq2GeneNorm, main = "RNASeq2GeneNorm, Raw")
+boxplot(log10(r.RNASeq2GeneNorm + 0.0001), main = "RNASeq2GeneNorm, Log10")
+boxplot(sd.RNASeq2GeneNorm, main = "RNASeq2GeneNorm, Sqrt & Standardized")
+#boxplot(scale(r.RNASeq2GeneNorm), main = "RNASeq2GeneNorm, Standardized only")
+#boxplot(scale(sqrt(r.RNASeq2GeneNorm)), main = "RNASeq2GeneNorm, Sqrt & Standardized")
+
+```
+
+```{r}
+boxplot(nodupe.miRNASeqGene, main = "miRNASeqGene, Raw")
+boxplot(log10(nodupe.miRNASeqGene + 0.01), main = "miRNASeqGene, Log10")
+boxplot(sd.miRNASeqGene, main = "miRNASeqGene, Log-Standardized")
+```
+
+# Transpose and merge data (for Ridge/Lasso)
+
+```{r}
+t4merge = function(df) {
+  t.df = as.data.frame(t(as.matrix(df))) #transpose while in matrix form
+  #t.df$patientID = rownames(t.df) #Explicitly write rownames as a column for later data merging
+  t.df
+}
+```
+
+```{r}
+
+t.RNASeq2GeneNorm = t4merge(sd.RNASeq2GeneNorm)
+t.gistict = t4merge(r.gistict)
+t.RPPAArray = t4merge(sd.RPPAArray)
+t.Mutations = t4merge(r.Mutations)
+t.miRNASeqGene = t4merge(sd.miRNASeqGene)
+```
+
+## Transpose for non-normalized data (for Squeezy/Xtune)
+
+```{r}
+
+traw.RNASeq2GeneNorm = t4merge(r.RNASeq2GeneNorm)
+
+traw.RPPAArray = t4merge(r.RPPAArray)
+
+traw.miRNASeqGene = t4merge(nodupe.miRNASeqGene)
+```
+
+
+
+# Convert to categorical
+
+```{r}
+c.gistict = t.gistict
+for (c in names(c.gistict)) { #no patientID
+  c.gistict[[c]] = as.factor(c.gistict[[c]])
+}
+
+c.Mutations = t.Mutations
+for (c in names(c.Mutations)) { #no patientID
+  c.Mutations[[c]] = as.factor(c.Mutations[[c]])
+}
+```
+
+```{r}
+# The vital_status variable and all non-response metadata are the categorical variables
+cols.cat = names(s.colData)[c(3,5:16)]
+#cols.cat
+
+
+```
+```{r}
+c.colData = s.colData
+for (c in cols.cat) { #no patientID
+  c.colData[[c]] = as.factor(c.colData[[c]])
+}
+```
+
+
+## Merge data
+
+Check if rows are identical before merging
+```{r}
+identical(row.names(t.RNASeq2GeneNorm), row.names(c.gistict))
+identical(row.names(c.gistict), row.names(t.RPPAArray))
+identical(row.names(t.RPPAArray), row.names(c.Mutations))
+identical(row.names(c.Mutations), row.names(t.miRNASeqGene))
+identical(row.names(t.miRNASeqGene), row.names(c.colData))
+```
+For joined horizontal data, the patientID is not needed as a column variable and is thus being removed.
+```{r}
+data.horizontal.join = do.call("cbind", list(t.miRNASeqGene, t.RNASeq2GeneNorm, t.RPPAArray, c.Mutations, c.gistict, c.colData))
+data.horizontal.join = data.horizontal.join[, names(data.horizontal.join) != "patientID"] #Remove redundant patientID
+```
+```{r}
+data.horizontal.raw.join = do.call("cbind", list(traw.miRNASeqGene, traw.RNASeq2GeneNorm, traw.RPPAArray, c.colData))
+data.horizontal.raw.join = data.horizontal.raw.join[, names(data.horizontal.raw.join) != "patientID"] #Remove redundant patientID
+```
+
+# Export data
+
+Numerical data, each column is a patient (For Factor Analysis)
+```{r}
+data.numeric.vert = list("RPPAArray" = sd.RPPAArray,
+                        "RNASeq2GeneNorm" = sd.RNASeq2GeneNorm,
+                        "miRNASeqGene" = sd.miRNASeqGene)
+saveRDS(data.numeric.vert, file = "data/derived/data_vertical_numeric_only.rds")
+```
+
+Horizontal data(each row is a patient), all, separate
+```{r}
+data.all.hori = list("RPPAArray" = t.RPPAArray,
+                     "RNASeq2GeneNorm" = t.RNASeq2GeneNorm,
+                     "miRNASeqGene" = t.miRNASeqGene,
+                     "gistict" = c.gistict,
+                     "Mutations" = c.Mutations,
+                     "colData.selected" = c.colData)
+saveRDS(data.all.hori, file = "data/derived/data_horizontal.rds")
+```
+
+Horizontal data, joined (for Ridge/Lasso)
+```{r}
+saveRDS(data.horizontal.join, file = "data/derived/data_horizontal_joined.rds")
+```
+
+Non-normalized horizontal data, joined (for Ridge/Lasso)
+```{r}
+saveRDS(data.horizontal.raw.join, file = "data/derived/data_horizontal_raw_joined.rds")
+```

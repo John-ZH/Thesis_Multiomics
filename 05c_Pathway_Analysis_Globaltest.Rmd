@@ -1,0 +1,278 @@
+---
+title: "Pathway Analysis for Globaltest"
+author: "John Zhuang"
+date: "2024-06-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(multiMiR)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(stringr)
+library(ggplot2)
+```
+
+# 0. Loading of Results
+
+## A. List of all Gene names in the dataset
+
+```{r}
+gene.names = readRDS("data/derived/unique_gene_names.rds")
+```
+
+## B. Selected Features
+
+```{r}
+results.globaltest = readRDS("data/sel_features/results_globaltest_sig.rds")
+sel.features = results.globaltest
+sel.features
+```
+
+# 1. Convert microRNA to genes
+
+Also remove the ending ".R2Gn" and ".RPPA" from gene names.
+
+
+```{r}
+split.by.omic = function(variable.list) {
+  out.mRSG = variable.list[startsWith(variable.list, "hsa")]
+  out.R2Gn = variable.list[endsWith(variable.list, ".R2Gn")]
+  out.RPPA = variable.list[endsWith(variable.list, ".RPPA")]
+  out = list("miRNASeqGene" = out.mRSG,
+             "RNASeq2GeneNorm" = out.R2Gn,
+             "RPPAArray" = out.RPPA)
+  out
+}
+```
+
+```{r}
+multiomics.to.GENES = function(sel.features, full.search = F, table = "validated", drop.miRNA = F) {
+  multiomics.list = split.by.omic(sel.features)
+  # Convert miRNASeqGene to target GENE names
+  # Skipped and returns an empty list instead of the list of select features,
+  # or if microRNA features are explicitly dropped (drop.miRNA = T).
+  # (Usually done when the features has only a few miRNA and unable to target any genes)
+  if (length(multiomics.list[[1]]) > 0 & !drop.miRNA) {
+    if (!full.search) { # Search only among the 198 genes in ACC, recommended
+    targets= get_multimir(mirna = multiomics.list[[1]], 
+                          target = gene.names,
+                          table = table,
+                          summary = T)
+    mRSG.target.genes = unique(targets@data$target_symbol)
+    } else { # Search the full dataset, not recommended. 
+             # Use only if ACC gene search returns nothing or fails.
+             # Genes not in the ACC genes need to be manually removed.
+    targets= get_multimir(mirna = multiomics.list[[1]], 
+                          table = table,
+                          summary = T)  
+    mRSG.target.genes = unique(targets@data$target_symbol)
+    }
+    
+  } else {
+    mRSG.target.genes = list()
+  }
+  #Remove suffix for Pathway Analysis Compatibility
+  R2Gn.genes = str_remove(multiomics.list[[2]], ".R2Gn")
+  
+  RPPA.genes = str_remove(multiomics.list[[3]], ".RPPA")
+  
+  #Join all cleaned-up genes are remove duplicates.
+  out1 = c(mRSG.target.genes, R2Gn.genes, RPPA.genes)
+  out = as.character(unique(out1))
+  out
+}
+```
+
+```{r}
+geneNames <- list("miRNASeqGene"= multiomics.to.GENES(sel.features$miRNASeqGene$var),
+                  "RNASeq2GeneNorm" = multiomics.to.GENES(sel.features$RNASeq2GeneNorm$var),
+                  "RPPAArray"=multiomics.to.GENES(sel.features$RPPAArray$var), 
+                  "All" = unique(c(multiomics.to.GENES(sel.features$miRNASeqGene$var),
+                            multiomics.to.GENES(sel.features$RNASeq2GeneNorm$var),
+                            multiomics.to.GENES(sel.features$RPPAArray$var)))
+                  )
+```
+```{r}
+geneNames
+```
+
+
+```{r}
+saveRDS(geneNames, file = "data/sel_features/gene_converted/genes_globaltest.rds")
+```
+
+
+
+# 2. Pathway Analysis
+
+## A. GO Classification
+
+```{r}
+ggo_MF <- list()#functional profile of a geneset for Molecular Function
+ggo_BP <- list()#functional profile of a geneset for Biological Process
+ggo_CC <- list()#functional profile of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+
+  ggo_MF[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="MF",
+    keyType="SYMBOL",
+    readable=TRUE)
+  
+  ggo_BP[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="BP",
+    keyType="SYMBOL",
+    readable=TRUE)
+
+  ggo_CC[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="CC",
+    keyType="SYMBOL",
+    readable=TRUE)    
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)) {
+  print(head(ggo_MF[[z]]))
+  print(head(ggo_BP[[z]]))
+  print(head(ggo_CC[[z]]))
+}
+```
+```{r}
+barplot(ggo_MF[[1]], title = "groupGO, Molecular Function, miRNASeqGene")
+barplot(ggo_MF[[2]], title = "groupGO, Molecular Function, RNASeq2GeneNorm")
+barplot(ggo_MF[[3]], title = "groupGO, Molecular Function, RPPAArray")
+barplot(ggo_MF[[4]], title = "groupGO, Molecular Function, All significant features")
+
+barplot(ggo_BP[[1]], title = "groupGO, Biological Process, miRNASeqGene")
+barplot(ggo_BP[[2]], title = "groupGO, Biological Process, RNASeq2GeneNorm")
+barplot(ggo_BP[[3]], title = "groupGO, Biological Process, RPPAArray")
+barplot(ggo_BP[[4]], title = "groupGO, Biological Process, All significant features")
+
+barplot(ggo_CC[[1]], title = "groupGO, Cellular Component, miRNASeqGene")
+barplot(ggo_CC[[2]], title = "groupGO, Cellular Component, RNASeq2GeneNorm")
+barplot(ggo_CC[[3]], title = "groupGO, Cellular Component, RPPAArray")
+barplot(ggo_CC[[4]], title = "groupGO, Cellular Component, All significant features")
+
+
+```
+
+## B. GO Over-Representation
+
+```{r}
+ego_MF <- list()#GO enrichment of a geneset for Molecular Function
+ego_BP <- list()#GO enrichment of a geneset for Biological Process
+ego_CC <- list()#GO enrichment of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+  ego_MF[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "MF",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_BP[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "BP",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_CC[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "CC",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)){
+  print(head(ego_MF[[z]]))
+  print(head(ego_BP[[z]]))
+  print(head(ego_CC[[z]]))
+}
+```
+
+
+```{r}
+barplot(ego_MF[[1]], title = "enrichGO, Molecular Function, miRNASeqGene")
+barplot(ego_MF[[2]], title = "enrichGO, Molecular Function, RNASeq2GeneNorm")
+barplot(ego_MF[[3]], title = "enrichGO, Molecular Function, RPPAArray")
+barplot(ego_MF[[4]], title = "enrichGO, Molecular Function, All significant features")
+
+barplot(ego_BP[[1]], title = "enrichGO, Biological Process, miRNASeqGene")
+barplot(ego_BP[[2]], title = "enrichGO, Biological Process, RNASeq2GeneNorm")
+barplot(ego_BP[[3]], title = "enrichGO, Biological Process, RPPAArray")
+barplot(ego_BP[[4]], title = "enrichGO, Biological Process, All significant features")
+
+barplot(ego_CC[[1]], title = "enrichGO, Cellular Component, miRNASeqGene")
+barplot(ego_CC[[2]], title = "enrichGO, Cellular Component, RNASeq2GeneNorm")
+barplot(ego_CC[[3]], title = "enrichGO, Cellular Component, RPPAArray")
+barplot(ego_CC[[4]], title = "enrichGO, Cellular Component, All significant features")
+
+
+```
+
+### DAG plots for ego
+
+```{r fig.width=20, fig.height=10}
+goplot(ego_MF[[1]]) + labs(title = "enrichGO, Molecular Function, miRNASeqGene")
+goplot(ego_MF[[2]]) + labs(title = "enrichGO, Molecular Function, RNASeq2GeneNorm")
+goplot(ego_MF[[3]]) + labs(title = "enrichGO, Molecular Function, RPPAArray")
+goplot(ego_MF[[4]]) + labs(title = "enrichGO, Molecular Function, All significant features")
+
+goplot(ego_BP[[1]]) + labs(title = "enrichGO, Biological Process, miRNASeqGene")
+goplot(ego_BP[[2]]) + labs(title = "enrichGO, Biological Process, RNASeq2GeneNorm")
+goplot(ego_BP[[3]]) + labs(title = "enrichGO, Biological Process, RPPAArray")
+goplot(ego_BP[[4]]) + labs(title = "enrichGO, Biological Process, All significant features")
+
+goplot(ego_CC[[1]]) + labs(title = "enrichGO, Cellular Component, miRNASeqGene")
+goplot(ego_CC[[2]]) + labs(title = "enrichGO, Cellular Component, RNASeq2GeneNorm")
+goplot(ego_CC[[3]]) + labs(title = "enrichGO, Cellular Component, RPPAArray")
+goplot(ego_CC[[4]]) + labs(title = "enrichGO, Cellular Component, All significant features")
+
+
+```
+
+# 3. Export Pathway Analysis result to data
+
+```{r}
+pathway = list("ggo_MF" = ggo_MF,
+               "ggo_BP" = ggo_BP,
+               "ggo_CC" = ggo_CC,
+               "ego_MF" = ego_MF,
+               "ego_BP" = ego_BP,
+               "ego_CC" = ego_CC)
+
+saveRDS(pathway, file = "data/out_pathway/pathways_globaltest.rds")
+```
+

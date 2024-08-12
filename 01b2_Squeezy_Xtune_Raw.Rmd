@@ -1,0 +1,251 @@
+---
+title: "Grouped Ridge, Lasso, and Elastic Net using Squeezy and Xtune, on unstandardized data"
+author: "John Zhuang"
+date: "2024-06-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(squeezy)
+library(xtune)
+library(fastDummies) #For making dummy variables
+```
+
+# 0. Data Preparation
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_raw_joined.rds")
+data.numeric = as.matrix(data.horizontal[, 1:701])
+```
+
+## Group list for Squeezy
+```{r}
+group.mRSG = 1:470
+group.R2Gn = 471:668
+group.RPPA = 669:701
+
+groupset = list("miRNASeqGene" = group.mRSG,
+                "RNASeq2GeneNorm" = group.R2Gn,
+                "RPPAArray" = group.RPPA)
+```
+
+## Z matrix for Xtune
+
+```{r}
+group.type = vector(mode = "character", length = ncol(data.numeric))
+group.type[group.mRSG] = "miRNASeqGene"
+group.type[group.R2Gn] = "RNASeq2GeneNorm"
+group.type[group.RPPA] = "RPPAArray"
+
+z.data.frame = data.frame("col.name" = colnames(data.numeric),
+                     "group" = group.type)
+z.dummy = dummy_cols(z.data.frame, select_columns = "group")
+z.matrix = as.matrix(z.dummy[,-c(1:2)])
+row.names(z.matrix) = colnames(data.numeric)
+```
+
+# 1. Squeezy
+
+## A. 10 folds
+
+```{r}
+set.seed(42)
+sqz.0_10 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                X = data.numeric,
+                groupset = groupset,
+                alpha = 0,
+                model = "logistic",
+                selectAIC = T,
+                resultsAICboth = T,
+                fold = 10)
+sqz.0.5_10 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                  X = data.numeric,
+                  groupset = groupset,
+                  alpha = 0.5,
+                  model = "logistic",
+                  selectAIC = T,
+                  resultsAICboth = T,
+                  fold = 10)
+sqz.1_10 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                X = data.numeric,
+                groupset = groupset,
+                alpha = 1,
+                model = "logistic",
+                selectAIC = T,
+                resultsAICboth = T,
+                fold = 10)
+```
+
+```{r}
+out.squeezy_10 = list("ridge" = sqz.0_10,
+                  "elastic.net" = sqz.0.5_10,
+                  "lasso" = sqz.1_10)
+```
+
+## B. 5 folds
+
+```{r}
+set.seed(42)
+sqz.0_5 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                X = data.numeric,
+                groupset = groupset,
+                alpha = 0,
+                model = "logistic",
+                selectAIC = T,
+                resultsAICboth = T,
+                fold = 5)
+sqz.0.5_5 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                  X = data.numeric,
+                  groupset = groupset,
+                  alpha = 0.5,
+                  model = "logistic",
+                  selectAIC = T,
+                  resultsAICboth = T,
+                  fold = 5)
+sqz.1_5 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                X = data.numeric,
+                groupset = groupset,
+                alpha = 1,
+                model = "logistic",
+                selectAIC = T,
+                resultsAICboth = T,
+                fold = 5)
+```
+
+```{r}
+out.squeezy_5 = list("ridge" = sqz.0_5,
+                  "elastic.net" = sqz.0.5_5,
+                  "lasso" = sqz.1_5)
+```
+
+## C. 3 folds
+
+```{r}
+set.seed(42)
+sqz.0_3 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                X = data.numeric,
+                groupset = groupset,
+                alpha = 0,
+                model = "logistic",
+                selectAIC = T,
+                resultsAICboth = T,
+                fold = 3)
+sqz.0.5_3 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                  X = data.numeric,
+                  groupset = groupset,
+                  alpha = 0.5,
+                  model = "logistic",
+                  selectAIC = T,
+                  resultsAICboth = T,
+                  fold = 3)
+sqz.1_3 = squeezy(Y = as.numeric(data.horizontal$vital_status) - 1,
+                X = data.numeric,
+                groupset = groupset,
+                alpha = 1,
+                model = "logistic",
+                selectAIC = T,
+                resultsAICboth = T,
+                fold = 3)
+```
+
+```{r}
+out.squeezy_3 = list("ridge" = sqz.0_3,
+                  "elastic.net" = sqz.0.5_3,
+                  "lasso" = sqz.1_3)
+```
+
+# 2. Xtune
+
+```{r}
+set.seed(42)
+xtune.0 = xtune(X = data.numeric,
+                Y = data.horizontal$vital_status,
+                Z = z.matrix,
+                family = "binary",
+               c = 0)
+xtune.0.5 = xtune(X = data.numeric,
+                  Y = data.horizontal$vital_status,
+                  Z = z.matrix,
+                  family = "binary",
+                  c = 0.5)
+xtune.1 = xtune(X = data.numeric,
+                Y = data.horizontal$vital_status,
+                Z = z.matrix,
+                family = "binary",
+                c = 1)
+```
+
+```{r}
+out.xtune = list("ridge" = xtune.0,
+                "elastic.net" = xtune.0.5,
+                "lasso" = xtune.1)
+```
+
+```{r}
+out.group = list("squeezy_10fold" = out.squeezy_10,
+                 "squeezy_5fold" = out.squeezy_5,
+                 "squeezy_3fold" = out.squeezy_3,
+                 "xtune" = out.xtune)
+
+saveRDS(out.group, file = "data/temp/results_squeezy_xtune_raw.rds")
+```
+
+# 3. Results Presentation
+
+## A. Squeezy
+
+### 10 folds
+
+```{r}
+colnames(data.numeric)[which(sqz.0.5_10$AICmodels$multigroup$fit$betaApprox != 0)]
+colnames(data.numeric)[which(sqz.0.5_10$AICmodels$onegroup$fit$betaApprox != 0)]
+sqz.0.5_10$modelbestAIC
+```
+
+```{r}
+colnames(data.numeric)[which(sqz.1_10$AICmodels$multigroup$fit$betaApprox != 0)]
+colnames(data.numeric)[which(sqz.1_10$AICmodels$onegroup$fit$betaApprox != 0)]
+sqz.1_10$modelbestAIC
+```
+
+### 5 folds
+
+```{r}
+colnames(data.numeric)[which(sqz.0.5_5$AICmodels$multigroup$fit$betaApprox != 0)]
+colnames(data.numeric)[which(sqz.0.5_5$AICmodels$onegroup$fit$betaApprox != 0)]
+sqz.0.5_5$modelbestAIC
+```
+
+```{r}
+colnames(data.numeric)[which(sqz.1_5$AICmodels$multigroup$fit$betaApprox != 0)]
+colnames(data.numeric)[which(sqz.1_5$AICmodels$onegroup$fit$betaApprox != 0)]
+sqz.1_5$modelbestAIC
+```
+
+### 3 folds
+
+```{r}
+colnames(data.numeric)[which(sqz.0.5_3$AICmodels$multigroup$fit$betaApprox != 0)]
+colnames(data.numeric)[which(sqz.0.5_3$AICmodels$onegroup$fit$betaApprox != 0)]
+sqz.0.5_3$modelbestAIC
+```
+
+```{r}
+colnames(data.numeric)[which(sqz.1_3$AICmodels$multigroup$fit$betaApprox != 0)]
+colnames(data.numeric)[which(sqz.1_3$AICmodels$onegroup$fit$betaApprox != 0)]
+sqz.1_3$modelbestAIC
+```
+
+## B. Xtune
+
+```{r}
+coef_xtune(xtune.0.5)$`0`[coef_xtune(xtune.0.5)$`0`[,1] != 0,]
+coef_xtune(xtune.0.5)$`1`[coef_xtune(xtune.0.5)$`1`[,1] != 0,]
+coef_xtune(xtune.1)$`0`[coef_xtune(xtune.1)$`0`[,1] != 0,]
+coef_xtune(xtune.1)$`1`[coef_xtune(xtune.1)$`1`[,1] != 0,]
+```
+

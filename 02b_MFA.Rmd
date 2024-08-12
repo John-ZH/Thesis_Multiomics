@@ -1,0 +1,251 @@
+---
+title: "MFA"
+author: "John Zhuang"
+date: "2024-05-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(FactoMineR)
+library(factoextra)
+library(ggplot2)
+library(scales)
+```
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_joined.rds")
+data.MFA = data.horizontal
+```
+
+
+# 1. MFA
+
+
+
+## MFA with only numerical datasets
+
+```{r}
+set.seed(42)
+MFA.numeric.only = MFA(data.MFA[,1:701],
+                 group = c(470, 198, 33),
+                 type = c("c", "c", "c"),
+                 ncp = 10,
+                 name.group = c("miRNASeqGene", "RNASeq2GeneNorm", "RPPAArray"))
+```
+
+## MFA Including some categorical metadata (Used only as a reference)
+
+```{r}
+set.seed(42)
+MFA.numeric.withd = MFA(data.MFA[,c(1:701, 998, 1001:1005)], 
+                 group = c(470, 198, 33, 6),
+                 type = c("c", "c", "c", "n"),
+                 ncp = 10,
+                 name.group = c("miRNASeqGene", "RNASeq2GeneNorm", "RPPAArray", "Demographics"))
+names(data.MFA[,c(998, 1001:1005)])
+```
+
+```{r}
+MFA.models = list("n.only" = MFA.numeric.only,
+                  "w.meta" = MFA.numeric.withd)
+saveRDS(MFA.models, file = "data/out_models/results_mfa.rds")
+```
+
+
+# 2. Results Representation
+
+## A. Samples and Variables contributions
+
+```{r}
+MFA.numeric.only$eig
+```
+
+```{r}
+MFA.results.samples = get_mfa_ind(MFA.numeric.only)
+MFA.results.samples$contrib
+```
+
+```{r}
+MFA.results.variables = get_mfa_var(MFA.numeric.only)
+MFA.results.variables$contrib
+MFA.results.variables$cos2
+```
+```{r}
+MFA.results.axes = get_mfa_partial_axes(MFA.numeric.only)
+MFA.results.axes$contrib
+```
+
+## B. Eigenvalues
+
+```{r}
+eigen.MFA = get_eigenvalue(MFA.numeric.only)
+head(eigen.MFA, 10)
+fviz_screeplot(MFA.numeric.only,
+               ncp = 10,
+               addlabels = T,
+               main = "Top 10 Dimensions by Variance Explained")
+```
+
+## C. Variable groups
+
+```{r}
+group.MFA = get_mfa_var(MFA.numeric.only, "group")
+fviz_mfa_var(MFA.numeric.only, "group")
+
+fviz_contrib(MFA.numeric.only, "group", axes = 1)
+fviz_contrib(MFA.numeric.only, "group", axes = 2)
+fviz_contrib(MFA.numeric.only, "group", axes = 3)
+fviz_contrib(MFA.numeric.only, "group", axes = 4)
+fviz_contrib(MFA.numeric.only, "group", axes = 5)
+fviz_contrib(MFA.numeric.only, "group", axes = 6)
+fviz_contrib(MFA.numeric.only, "group", axes = 7)
+fviz_contrib(MFA.numeric.only, "group", axes = 8)
+fviz_contrib(MFA.numeric.only, "group", axes = 9)
+fviz_contrib(MFA.numeric.only, "group", axes = 10)
+```
+
+### Print contribution percentage of top 3 dimensions:
+
+```{r}
+fviz_contrib(MFA.numeric.only, "group", axes = 1)$data
+fviz_contrib(MFA.numeric.only, "group", axes = 2)$data
+fviz_contrib(MFA.numeric.only, "group", axes = 3)$data
+```
+
+
+## D. Contribution of Independent Quantitative Variables
+
+```{r}
+quant.var.MFA = get_mfa_var(MFA.numeric.only, "quanti.var")
+
+fviz_mfa_var(MFA.numeric.only, "quanti.var",
+             col.var.sup = "violet", repel = TRUE,
+             geom = "point", legend = "bottom")
+
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 1, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 2, top = 30, palette= hue_pal()(3)[2:3])
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 3, top = 30, palette= hue_pal()(3)[2:3])
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 4, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 5, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 6, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 7, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 8, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 9, top = 30)
+fviz_contrib(MFA.numeric.only, choice = "quanti.var", axes = 10, top = 30)
+```
+
+## E. Plot of individuals
+
+```{r}
+MFA.ind = get_mfa_ind(MFA.numeric.only)
+
+#fviz_mfa_ind(MFA.numeric.only, col.ind = "cos2", 
+#             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+#             repel = TRUE)
+
+fviz_mfa_ind(MFA.numeric.only,
+             geom = "point")
+
+fviz_mfa_var(MFA.numeric.only,
+             geom = "point")
+
+fviz_mfa_ind(MFA.numeric.withd, 
+             habillage = "vital_status",
+             palette = c("blue", "red"),
+             addEllipses = TRUE, ellipse.type = "confidence", 
+             repel = TRUE, # Avoid text overlapping
+             geom = "point"
+             ) 
+
+fviz_ellipses(MFA.numeric.withd, 
+             c("vital_status", "gender", "radiation_therapy",
+               "pathologic_stage", "pathology_T_stage", "pathology_N_stage"),
+             repel = TRUE, # Avoid text overlapping
+             palette = "simpsons",
+             geom = "point"
+             ) 
+
+#fviz_mfa_ind(MFA.numeric.withd, 
+#             habillage = "event_time",
+#             geom = "point"
+#             ) 
+```
+
+###  Manual Plotting of 1st and 2nd dimensions
+
+```{r}
+dim123 = as.data.frame(MFA.results.samples$coord[,1:3])
+vital_status = data.MFA$vital_status
+all(rownames(dim123) == rownames(vital_status))
+merged.plotdata = cbind(dim123, vital_status)
+
+ggplot(data = merged.plotdata, aes(x=Dim.1, y = Dim.2, color = vital_status)) +
+  geom_point() +
+  stat_ellipse(level = 0.1) +
+  stat_ellipse(level = 0.001, geom = "point") +
+  scale_color_manual(values = c("blue", "red")) +
+  ggtitle("Vital Status of samples, MFA Dimensions 1 & 2")
+```
+```{r}
+ggplot(data = merged.plotdata, aes(x=Dim.2, y = Dim.3, color = vital_status)) +
+  geom_point() +
+  stat_ellipse(level = 0.1) +
+  stat_ellipse(level = 0.001, geom = "point") +
+  scale_color_manual(values = c("blue", "red")) +
+  ggtitle("Vital Status of samples, MFA Dimensions 2 & 3")
+```
+
+
+## F. Partial Individuals
+
+```{r}
+fviz_mfa_ind(MFA.numeric.only, partial = "all") 
+fviz_mfa_ind(MFA.numeric.only, partial = c("TCGA-OR-A5LT", "TCGA-PK-A5H9")) 
+```
+
+## G. Partial Axes
+
+```{r}
+fviz_mfa_axes(MFA.numeric.only)
+```
+
+# 3. Save MFA variable contribution to RDS file
+
+We only keep dimensions with eigenvalues >= 1. 
+
+In this case, it's the first 3rd dimensions.
+
+```{r}
+eig.values = get_eigenvalue(MFA.numeric.only)
+eig.values[which(eig.values[,1] > 1),]
+```
+
+Extract and order first 3 dimensions by variable contribution
+```{r}
+MFA.variables.contrib = MFA.results.variables$contrib
+contrib.dim1 = MFA.variables.contrib[order(MFA.variables.contrib[,1], decreasing = T), 1]
+contrib.dim2 = MFA.variables.contrib[order(MFA.variables.contrib[,2], decreasing = T), 2]
+contrib.dim3 = MFA.variables.contrib[order(MFA.variables.contrib[,3], decreasing = T), 3]
+```
+
+Only keep variables with a greater than mean contribution.
+```{r}
+mean.contrib = 100/dim(MFA.variables.contrib)[1]
+contrib.dim1.sel = contrib.dim1[which(contrib.dim1 > mean.contrib)]
+contrib.dim2.sel = contrib.dim2[which(contrib.dim2 > mean.contrib)]
+contrib.dim3.sel = contrib.dim3[which(contrib.dim3 > mean.contrib)]
+```
+
+
+
+```{r}
+results.mfa = list("Dim1" = contrib.dim1.sel,
+                   "Dim2" = contrib.dim2.sel,
+                   "Dim3" = contrib.dim3.sel)
+saveRDS(results.mfa, file = "data/sel_features/results_mfa_selected.rds")
+```
+

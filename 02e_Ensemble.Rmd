@@ -1,0 +1,249 @@
+---
+title: "Ensemble Methods"
+author: "John Zhuang"
+date: "2024-05-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(fabia)
+library(MOFA2)
+#library(biclust)
+library(superbiclust)
+library(ggplot2)
+```
+
+```{r}
+data.vertical = readRDS("data/derived/data_vertical_numeric_only.rds")
+```
+
+# 0. Preparation
+
+## a) Check again to reassure if colnames are identical before binding
+```{r}
+#
+identical(colnames(data.vertical$RPPAArray), colnames(data.vertical$RNASeq2GeneNorm))
+identical(colnames(data.vertical$RNASeq2GeneNorm), colnames(data.vertical$miRNASeqGene))
+```
+
+## b) Merge data into 1 matrix
+```{r}
+data.vert.joined = do.call("rbind", list(data.vertical$RPPAArray, data.vertical$RNASeq2GeneNorm, data.vertical$miRNASeqGene))
+```
+```{r}
+data.matrix = as.matrix(data.vert.joined)
+```
+
+
+# 1. Bicluster hierarchy
+
+## A. Run 20 FABIA of 10 Biclusters and compare the results
+
+```{r}
+#Number of runs
+n.runs = 20
+```
+
+```{r}
+# Generate one seed per run
+set.seed(42)
+seeds = sample.int(100, n.runs)
+seeds
+```
+
+```{r}
+#Number of Biclusters
+n.bcs = 10
+
+results.FABIA = list()
+
+for (i in 1:n.runs) {
+  set.seed(seeds[i])
+  fabia.curr = fabia(data.matrix, p =  n.bcs)
+  results.FABIA[[i]] = BiclustSet(fabia.curr)
+}
+```
+
+```{r}
+result.FABIA.all = results.FABIA[[1]]
+
+cols = result.FABIA.all@ColumnMembership
+genes = result.FABIA.all@GenesMembership
+
+for (i in 2:n.runs) {
+  cols = rbind(cols, results.FABIA[[i]]@ColumnMembership)
+  genes = cbind(genes, results.FABIA[[i]]@GenesMembership)
+}
+```
+
+```{r}
+result.FABIA.all@ColumnMembership = cols
+result.FABIA.all@GenesMembership = genes
+result.FABIA.all@Number = n.bcs * n.runs
+#View(result.FABIA.all)
+```
+
+```{r, fig.width=20, fig.height=10}
+jaccard.FABIA = similarity(result.FABIA.all, index = "jaccard", type = "both")
+clustree.FABIA = HCLtree(jaccard.FABIA)
+plot(clustree.FABIA, cex = 0.5)
+abline(h = 0.9, col = 2, lwd = 0.5)
+abline(h = 0.995, col = 3, lwd = 0.5)
+```
+```{r}
+biclusters = cutree(clustree.FABIA,h=0.995)
+nBiC = length(unique(biclusters))
+resNames = list()
+sampleNames = list()
+```
+
+```{r}
+#Which nodes the 200 FABIA biclusters belong in
+biclusters
+```
+
+
+```{r}
+for(l in 1:nBiC){
+  #print(l)
+  idx = which(biclusters==l)
+  #if (length(idx) == 1) {
+  #  print(l)
+  #}
+  geneInfo = result.FABIA.all@GenesMembership[,idx, drop=F]
+  sampleInfo = result.FABIA.all@ColumnMembership[idx,, drop=F]
+
+  outGenes = unlist(apply(geneInfo, 1, function(x) length(which(x)==TRUE)))
+  outSamples = unlist(apply(sampleInfo, 2, function(x) length(which(x)==TRUE)))
+  #print(l)
+  #print(outGenes)
+  resNames[[l]] = rownames(data.matrix)[outGenes==length(idx)] # Originally a >= sign, but > is not possible.
+  sampleNames[[l]] = colnames(data.matrix)[outSamples>=length(idx)/2]
+}
+```
+
+```{r}
+out.superbiclust.FABIA = list("resNames" = resNames,
+                              "sampleNames" = sampleNames,
+                              "biclust.per.node" = table(biclusters))
+saveRDS(out.superbiclust.FABIA, file = "data/sel_features/results_superbiclust.fabia.rds")
+```
+
+
+## B. Compare FABIA and MOFA results
+
+```{r}
+#Load existing FABIA data
+models.fabia = readRDS("data/out_models/results_fabia.rds")
+fabia_10 =  models.fabia$`10bc`
+result.FABIA = BiclustSet(fabia_10)
+```
+
+```{r}
+#Load existing MOFA data
+filepath = "data/out_models/mofa10f.hdf5"
+MOFA_10 = load_model(filepath)
+```
+
+```{r}
+#Extract MOFA outputs to that of the same format as FABIA
+
+#factors.MOFA = get_factors(model.MOFA)
+Z.MOFA = t(MOFA_10@expectations$Z$group1)
+#Z.MOFA = get_factors(model.MOFA)$group1
+L.MOFA.list = MOFA_10@expectations$W
+L.MOFA = rbind(L.MOFA.list$view_RPPA, L.MOFA.list$view_R2Gn, L.MOFA.list$view_mRNA)
+```
+
+The Z and L threasholds are defined and calculated with the same analogy as for FABIA.
+
+The code below is copied from the extractBic function in the FABIA package, which is used by superbiclust to convert FABIA results to bicluster form.
+
+```{r}
+threasZ.MOFA = 0.5
+
+tt = 0
+for (i in 1:ncol(L.MOFA)) {
+  tt = tt + sum(L.MOFA[,i]^2) * sum(Z.MOFA[i,]^2)
+}
+tt = tt/(as.double(nrow(L.MOFA)) * as.double(ncol(L.MOFA)) * as.double(ncol(Z.MOFA)))
+threasL.MOFA = sqrt(tt) / threasZ.MOFA
+threasL.MOFA
+```
+
+
+For the sake of fairness, we will be calculating FABIA Z and L thresholds using the same manual way.
+
+```{r}
+threasZ.fabia= 0.5
+
+tt = 0
+for (i in 1:ncol(L(fabia_10))) {
+  tt = tt + sum(L(fabia_10)[,i]^2) * sum(Z(fabia_10)[i,]^2)
+}
+tt = tt/(as.double(nrow(L(fabia_10))) * as.double(ncol(L(fabia_10))) * as.double(ncol(Z(fabia_10))))
+threasL.fabia = sqrt(tt) / threasZ.fabia
+threasL.fabia
+```
+
+```{r}
+result.MOFA_FABIA_manual = result.FABIA
+result.MOFA_FABIA_manual@ColumnMembership = rbind(((abs(Z(fabia_10)) > threasZ.fabia)), (abs(Z.MOFA) > threasZ.MOFA))
+result.MOFA_FABIA_manual@GenesMembership = cbind(((abs(L(fabia_10)) > threasL.fabia)), (abs(L.MOFA) > threasL.MOFA))
+result.MOFA_FABIA_manual@Number = 10*2
+```
+
+```{r}
+jaccard.MOFA_FABIA_manual = similarity(result.MOFA_FABIA_manual, index = "jaccard", type = "both")
+clustree.MOFA_FABIA_manual = HCLtree(jaccard.MOFA_FABIA_manual)
+plot(clustree.MOFA_FABIA_manual)
+abline(h = 0.9, col = 2, lwd = 0.5)
+abline(h = 0.995, col = 3, lwd = 0.5)
+```
+
+### Important: FABIA biclusters are not in the same order as Superbiclust 1 ~ 10
+
+The correct order is as follows:
+```{r}
+setNames(colnames(L(fabia_10)), c(1:10))
+```
+
+
+```{r}
+biclusters.fm = cutree(clustree.MOFA_FABIA_manual,h=0.9)
+nBiC.fm = length(unique(biclusters.fm))
+resNames.fm = list()
+sampleNames.fm = list()
+```
+
+```{r}
+#Which nodes the 10 FABIA biclusters and 10 MOFA factors belong in
+biclusters.fm
+```
+
+
+```{r}
+for(l in 1:nBiC.fm){
+
+  idx = which(biclusters.fm==l)
+
+  geneInfo = result.MOFA_FABIA_manual@GenesMembership[,idx, drop=F]
+  sampleInfo = result.MOFA_FABIA_manual@ColumnMembership[idx,, drop=F]
+
+  outGenes = unlist(apply(geneInfo, 1, function(x) length(which(x)==TRUE)))
+  outSamples = unlist(apply(sampleInfo, 2, function(x) length(which(x)==TRUE)))
+  resNames.fm[[l]] = rownames(data.matrix)[outGenes==length(idx)]
+  sampleNames.fm[[l]] = colnames(data.matrix)[outSamples>=length(idx)/2]
+}
+```
+
+```{r}
+out.superbiclust.FABIA_MOFA = list("resNames" = resNames.fm,
+                              "sampleNames" = sampleNames.fm,
+                              "biclust.per.node" = table(biclusters.fm))
+saveRDS(out.superbiclust.FABIA_MOFA, file = "data/sel_features/results_superbiclust.fabia_mofa.rds")
+```

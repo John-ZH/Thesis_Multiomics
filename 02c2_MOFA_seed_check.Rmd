@@ -1,0 +1,181 @@
+---
+title: "MOFA seed difference checker"
+author: "John Zhuang"
+date: "2024-06-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(MOFA2)
+library(utils)
+library(stats)
+library(ggplot2)
+```
+
+```{r}
+data.vertical = readRDS("data/derived/data_vertical_numeric_only.rds")
+```
+
+# 0. Overview
+
+This document aims to check if MOFA returns different results with different seeds under the same setting.
+
+# 1. MOFA Training
+
+## A. Check again to reassure if colnames are identical before analysis
+```{r}
+#
+identical(colnames(data.vertical$RPPAArray), colnames(data.vertical$RNASeq2GeneNorm))
+identical(colnames(data.vertical$RNASeq2GeneNorm), colnames(data.vertical$miRNASeqGene))
+```
+## B. Create MOFA object
+
+```{r}
+matrix.list = list("view_mRNA" = as.matrix(data.vertical$miRNASeqGene),
+                   "view_R2Gn" = as.matrix(data.vertical$RNASeq2GeneNorm),
+                   "view_RPPA" = as.matrix(data.vertical$RPPAArray))
+```
+
+```{r}
+data.mofa = create_mofa(matrix.list)
+```
+```{r}
+plot_data_overview(data.mofa)
+```
+
+## C. Add metadata to the model
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal.rds")
+meta.data = data.horizontal$colData.selected
+```
+
+```{r}
+#Rename patientID to sample for MOFA
+names(meta.data)[1] = "sample"
+
+samples_metadata(data.mofa) = meta.data
+head(samples_metadata(data.mofa))
+```
+
+## D. Model training parameters
+```{r}
+data.opts = get_default_data_options(data.mofa)
+data.opts
+model.opts = get_default_model_options(data.mofa)
+model.opts
+training.opts = get_default_training_options(data.mofa)
+training.opts
+```
+The output warns the default 15 factors to be too many for the sample size.
+Thus, we reduce it to the 10 (maximum recommended):
+
+```{r}
+model.opts_10 = get_default_model_options(data.mofa)
+model.opts_10$num_factors = 10
+```
+
+We will also do 1, 2, 3 and 5 factors in order to compare results with those FABIA.
+
+```{r}
+model.opts_1 = get_default_model_options(data.mofa)
+model.opts_2 = get_default_model_options(data.mofa)
+model.opts_3 = get_default_model_options(data.mofa)
+model.opts_5 = get_default_model_options(data.mofa)
+
+model.opts_1$num_factors = 1
+model.opts_2$num_factors = 2
+model.opts_3$num_factors = 3
+model.opts_5$num_factors = 5
+```
+
+## E. Set 5 different seeds.
+
+```{r}
+# Generate one seed per run
+set.seed(42)
+seeds = sample.int(100, 5)
+seeds
+```
+
+## F. Train the model (10 factors).
+
+```{r}
+data.mofa.ready_10 = prepare_mofa(
+  object = data.mofa,
+  data_options = data.opts,
+  model_options = model.opts_10,
+  training_options = training.opts
+)
+```
+
+### Attempt 1
+```{r, cache=F}
+outfile = "data/temp/mofat1.hdf5"
+set.seed(seeds[1])
+MOFA.t1 <- run_mofa(data.mofa.ready_10, outfile, use_basilisk=T)
+```
+
+### Attempt 2
+```{r, cache=F}
+outfile = "data/temp/mofat2.hdf5"
+set.seed(seeds[2])
+MOFA.t2 <- run_mofa(data.mofa.ready_10, outfile, use_basilisk=T)
+```
+
+### Attempt 3
+```{r, cache=F}
+outfile = "data/temp/mofat3.hdf5"
+set.seed(seeds[3])
+MOFA.t3 <- run_mofa(data.mofa.ready_10, outfile, use_basilisk=T)
+```
+
+### Attempt 4
+```{r, cache=F}
+outfile = "data/temp/mofat4.hdf5"
+set.seed(seeds[4])
+MOFA.t4 <- run_mofa(data.mofa.ready_10, outfile, use_basilisk=T)
+```
+
+### Attempt 5
+```{r, cache=F}
+outfile = "data/temp/mofat5.hdf5"
+set.seed(seeds[5])
+MOFA.t5 <- run_mofa(data.mofa.ready_10, outfile, use_basilisk=T)
+```
+
+# 2. Compare Results
+
+```{r}
+factors1 = get_factors(MOFA.t1, as.data.frame = T)
+weights1 = get_weights(MOFA.t1, as.data.frame = T)
+
+factors2 = get_factors(MOFA.t2, as.data.frame = T)
+weights2 = get_weights(MOFA.t2, as.data.frame = T)
+
+factors3 = get_factors(MOFA.t3, as.data.frame = T)
+weights3 = get_weights(MOFA.t3, as.data.frame = T)
+
+factors4 = get_factors(MOFA.t4, as.data.frame = T)
+weights4 = get_weights(MOFA.t4, as.data.frame = T)
+
+factors5 = get_factors(MOFA.t5, as.data.frame = T)
+weights5 = get_weights(MOFA.t5, as.data.frame = T)
+```
+
+```{r}
+all(weights1 == weights2)
+all(weights2 == weights3)
+all(weights3 == weights4)
+all(weights4 == weights5)
+
+all(factors1 == factors2)
+all(factors2 == factors3)
+all(factors3 == factors4)
+all(factors4 == factors5)
+```
+It can be seen that all MOFA results are equal regardless of the seed set in R.

@@ -1,0 +1,1377 @@
+---
+title: "Gaussian Graphical Model"
+author: "John Zhuang"
+date: "2024-06-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rags2ridges)
+library(ggplot2)
+```
+
+# 0. Data Preparation
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_joined.rds")
+data.numeric = as.matrix(data.horizontal[, 1:701])
+data.Y = data.horizontal$vital_status
+```
+
+```{r}
+group.mRSG = 1:470
+group.R2Gn = 471:668
+group.RPPA = 669:701
+```
+
+# 1. Wholistic analysis by omic 
+
+## A. RPPAArray
+
+```{r}
+data.RPPA = data.numeric[, group.RPPA]
+```
+
+LambdaMax is reduced from 1000 to 10 as all optLambda values are < 10.
+
+Unused 3, 5 and 10-fold CV are disabled and presented in document 03b.
+```{r}
+set.seed(42)
+opt.RPPA = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 10)
+#opt.RPPA.10 = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+#opt.RPPA.5 = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+#opt.RPPA.3 = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+#setNames(c(3,5,10,43), c(opt.RPPA.3$optLambda, opt.RPPA.5$optLambda, opt.RPPA.10$optLambda, opt.RPPA$optLambda))
+opt.RPPA$optLambda
+```
+
+```{r}
+edgeHeat(opt.RPPA$optPrec, diag = F, textsize = 7)
+```
+
+
+```{r}
+#P = ridgeP(covML(data.RPPA), lambda = 0.001)
+#test = covML(data.RPPA)
+CNplot(covML(data.RPPA),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.RPPA$optLambda)
+```
+```{r}
+#heatmaps.RPPA = vector(length = 9)
+#for (i in (seq(0.1, 0.9, 0.1))) {
+#  heatmaps.RPPA[10*i] = 
+#    edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+#             diag = F, textsize = 7,
+#             main =  paste("False Discovery Rate cutoff:", i))
+#}
+
+## I have to do the below, otherwise edgeHeat maps do not show up.
+i = 0.1
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.2
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.3
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.4
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.5
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.6
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.7
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.8
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+i = 0.9
+edgeHeat(M = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 7,
+             main =  paste("False Discovery Rate cutoff:", i))
+```
+```{r}
+#P0 = sparsify(P, threshold = "localFDR")
+P0.RPPA = sparsify(opt.RPPA$optPrec, threshold = "localFDR", FDRcut=0.9)
+```
+
+```{r}
+#edgeHeat(P0.RPPA$sparseParCor, diag = F, textsize = 7)
+```
+
+```{r, fig.width=10, fig.height=10}
+#dev.new(width = 10, height = 10, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(P0.RPPA$sparseParCor, type = "fancy", Vsize = 15, Vcex = .5,
+       cut = 0.5,
+       lay = "layout_with_fr", prune = T,
+       main = "RPPA Array data\nFDRcutoff at 0.9, Strong Edge cutoff at 0.5")
+#Ugraph(P0.RPPA$sparseParCor, type = "fancy", Vsize = 15, Vcex = .5,
+#       cut = 0.5,
+#       lay = "layout_in_circle", prune = T,
+#       main = "RPPA Array data\nFDRcutoff at 0.9, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.RPPA = as.data.frame(GGMnetworkStats(P0.RPPA$sparseParCor, as.table = T))
+GGM.RPPA.order = GGM.RPPA[order(GGM.RPPA$degree, decreasing = T), ]
+
+GGM.RPPA.order[1:10,]
+```
+```{r}
+ggplot(GGM.RPPA.order, aes(x = reorder(rownames(GGM.RPPA.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.RPPA.order$degree), linetype = "dashed", color = "red")  +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "blue")  +
+  scale_x_discrete(name = "RPPA Array", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-1")
+```
+
+
+## B. RNASeq2GeneNorm
+
+```{r}
+data.R2Gn = data.numeric[, group.R2Gn]
+```
+
+```{r}
+set.seed(42)
+opt.R2Gn = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 10)
+#opt.R2Gn.10 = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+#opt.R2Gn.5 = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+#opt.R2Gn.3 = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+#setNames(c(3,5,10,43), c(opt.R2Gn.3$optLambda, opt.R2Gn.5$optLambda, opt.R2Gn.10$optLambda, opt.R2Gn$optLambda))
+opt.R2Gn$optLambda
+```
+```{r}
+edgeHeat(opt.R2Gn$optPrec, diag = F, textsize = 1)
+```
+
+
+```{r}
+#P.R2Gn = ridgeP(covML(data.R2Gn), lambda = opt.R2Gn$optLambda)
+CNplot(covML(data.R2Gn),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.R2Gn$optLambda)
+```
+
+```{r}
+i = 0.1
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.5
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.7
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.9
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.999
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.999999
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 1-1e-10
+edgeHeat(M = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+```
+
+
+Smallest possible FDRcut:
+
+```{r}
+#P0.R2Gn = sparsify(P.R2Gn, threshold = "localFDR")
+P0.R2Gn.min = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+```
+
+```{r, fig.width=25, fig.height=25}
+#dev.new(width = 20, height = 20, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(P0.R2Gn.min$sparseParCor, type = "fancy", lay = "layout_with_fr",
+       Vsize = 5, Vcex = .45, prune = T, cut = 0.5,
+       main = "RNASeq2GeneNorm data\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5")
+#Ugraph(P0.R2Gn.min$sparseParCor, type = "fancy", lay = "layout_in_circle",
+#       Vsize = 5, Vcex = .5, prune = T, cut = 0.5,
+#       main = "RNASeq2GeneNorm data\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.R2Gn.min = as.data.frame(GGMnetworkStats(P0.R2Gn.min$sparseParCor, as.table = T))
+GGM.R2Gn.min.order = GGM.R2Gn.min[order(GGM.R2Gn.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.R2Gn.min.order[1:round(nrow(GGM.R2Gn.min.order) * 0.05), ]
+```
+
+```{r fig.width=20, fig.height=8}
+ggplot(GGM.R2Gn.min.order, aes(x = reorder(rownames(GGM.R2Gn.min.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.R2Gn.min.order$degree), linetype = "dashed", color = "red")  +
+  # 10th unit: top 5%
+  geom_hline(yintercept = GGM.R2Gn.min.order[10,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14")
+```
+
+FDRcut 1-1e-6:
+
+```{r}
+#P0.R2Gn = sparsify(P.R2Gn, threshold = "localFDR")
+P0.R2Gn.6 = sparsify(opt.R2Gn$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+```
+
+```{r, fig.width=25, fig.height=25}
+#dev.new(width = 20, height = 20, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(P0.R2Gn.6$sparseParCor, type = "fancy", lay = "layout_with_fr",
+       Vsize = 5, Vcex = .45, prune = T, cut = 0.5,
+       main = "RNASeq2GeneNorm data\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+#Ugraph(P0.R2Gn.6$sparseParCor, type = "fancy", lay = "layout_in_circle",
+#       Vsize = 5, Vcex = .5, prune = T, cut = 0.5,
+#       main = "RNASeq2GeneNorm data\nFDRcutoff at .999999, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.R2Gn.6 = as.data.frame(GGMnetworkStats(P0.R2Gn.6$sparseParCor, as.table = T))
+GGM.R2Gn.6.order = GGM.R2Gn.6[order(GGM.R2Gn.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.R2Gn.6.order[1:round(nrow(GGM.R2Gn.6.order) * 0.05), ]
+```
+```{r fig.width=20, fig.height=8}
+ggplot(GGM.R2Gn.6.order, aes(x = reorder(rownames(GGM.R2Gn.6.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.R2Gn.6.order$degree), linetype = "dashed", color = "red")  +
+  # 10th unit: top 5%
+  geom_hline(yintercept = GGM.R2Gn.6.order[10,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6")
+```
+
+## C. miRNASeqGene 
+
+```{r}
+data.mRSG = data.numeric[, group.mRSG]
+```
+
+```{r}
+set.seed(42)
+opt.mRSG = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 10)
+#opt.mRSG.10 = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+#opt.mRSG.5 = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+#opt.mRSG.3 = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+#setNames(c(3,5,10,43), c(opt.mRSG.3$optLambda, opt.mRSG.5$optLambda, opt.mRSG.10$optLambda, opt.mRSG$optLambda))
+opt.mRSG$optLambda
+```
+```{r}
+edgeHeat(opt.mRSG$optPrec, diag = F, textsize = 0.1)
+```
+
+
+```{r}
+CNplot(covML(data.mRSG),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.mRSG$optLambda)
+```
+```{r}
+i = 0.1
+edgeHeat(M = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.5
+edgeHeat(M = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.9
+edgeHeat(M = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.999
+edgeHeat(M = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 1-1e-6
+edgeHeat(M = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 1-1e-10
+edgeHeat(M = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+```
+
+Smallest possible FDRcut:
+
+```{r}
+P0.mRSG.min = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=1-1e-13)
+```
+```{r, fig.width=40, fig.height=40}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = F)
+set.seed(42)
+Ugraph(P0.mRSG.min$sparseParCor, type = "fancy", lay = "layout_with_fr",
+       Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       main = "miRNASeqGene data\nFDRcutoff at 1-1e-13, Strong Edge cutoff at 0.5")
+#Ugraph(P0.mRSG.min$sparseParCor, type = "fancy", lay = "layout_in_circle",
+#       Vsize = 2, Vcex = .1, prune = T, cut = 0.5,
+#       main = "miRNASeqGene data\nFDRcutoff at 1-1e-13, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.mRSG.min = as.data.frame(GGMnetworkStats(P0.mRSG.min$sparseParCor, as.table = T))
+GGM.mRSG.min.order = GGM.mRSG.min[order(GGM.mRSG.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.mRSG.min.order[1:round(nrow(GGM.mRSG.min.order) * 0.05), ]
+```
+
+```{r fig.width=47, fig.height=8}
+ggplot(GGM.mRSG.min.order, aes(x = reorder(rownames(GGM.mRSG.min.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.mRSG.min.order$degree), linetype = "dashed", color = "red")  +
+  # 24th unit: top 5%
+  geom_hline(yintercept = GGM.mRSG.min.order[24,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "miRNASeqGene", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-13")
+```
+FDRcut 1-1e-6:
+
+```{r}
+P0.mRSG.6 = sparsify(opt.mRSG$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+```
+```{r, fig.width=40, fig.height=40}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = F)
+set.seed(42)
+Ugraph(P0.mRSG.6$sparseParCor, type = "fancy", lay = "layout_with_fr",
+       Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       main = "miRNASeqGene data\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+#Ugraph(P0.mRSG.6$sparseParCor, type = "fancy", lay = "layout_in_circle",
+#       Vsize = 2, Vcex = .1, prune = T, cut = 0.5,
+#       main = "miRNASeqGene data\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.mRSG.6 = as.data.frame(GGMnetworkStats(P0.mRSG.6$sparseParCor, as.table = T))
+GGM.mRSG.6.order = GGM.mRSG.6[order(GGM.mRSG.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.mRSG.6.order[1:round(nrow(GGM.mRSG.6.order) * 0.05), ]
+```
+```{r fig.width=47, fig.height=8}
+ggplot(GGM.mRSG.6.order, aes(x = reorder(rownames(GGM.mRSG.6.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.mRSG.6.order$degree), linetype = "dashed", color = "red")  +
+  # 24th unit: top 5%
+  geom_hline(yintercept = GGM.mRSG.6.order[24,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "miRNASeqGene", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6")
+```
+
+## D. All data
+
+```{r}
+set.seed(42)
+opt.all = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 10)
+#opt.all.10 = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+#opt.all.5 = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+#opt.all.3 = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+#setNames(c(3,5,10,43), c(opt.all.3$optLambda, opt.all.5$optLambda, opt.all.10$optLambda, opt.all$optLambda))
+opt.all$optLambda
+```
+
+```{r}
+edgeHeat(opt.all$optPrec, diag = F, textsize = 0.1)
+```
+
+
+```{r}
+CNplot(covML(data.numeric),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.all$optLambda)
+```
+```{r}
+i = 0.1
+edgeHeat(M = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.5
+edgeHeat(M = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.9
+edgeHeat(M = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 0.999
+edgeHeat(M = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 1-1e-6
+edgeHeat(M = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+
+i = 1-1e-10
+edgeHeat(M = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=i, verbose = F)$sparseParCor,
+             diag = F, textsize = 1,
+             main =  paste("False Discovery Rate cutoff:", i))
+```
+
+Color mapping for different omics:
+
+
+
+
+Smallest possible FDRcut:
+
+```{r}
+P0.all.min = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+```
+
+```{r}
+PcorP = pruneMatrix(P0.all.min$sparseParCor)
+Colors.min <- rownames(PcorP)
+Colors.min[grep("hsa", rownames(PcorP))] <- "red"
+Colors.min[grep(".RPPA", rownames(PcorP))] <- "green"
+Colors.min[grep(".R2Gn", rownames(PcorP))] <- "cyan"
+```
+
+
+
+```{r, fig.width=40, fig.height=40}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = F)
+set.seed(42)
+Ugraph(PcorP, type = "fancy", lay = "layout_with_fr", 
+       Vcolor = Colors.min, Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       main = "All Numerical data\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+#Ugraph(P0.all.min$sparseParCor, type = "fancy", lay = "layout_in_circle", 
+#       Vcolor = Colors, Vsize = 2, Vcex = .1, prune = T, cut = 0.5,
+#       main = "All Numerical data\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+```
+```{r}
+GGM.all.min = as.data.frame(GGMnetworkStats(P0.all.min$sparseParCor, as.table = T))
+GGM.all.min.order = GGM.all.min[order(GGM.all.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.all.min.order[1:round(nrow(GGM.all.min.order) * 0.05), ]
+```
+
+```{r}
+Colors.min.plot <- rownames(GGM.all.min.order)
+Colors.min.plot[grep("hsa", rownames(GGM.all.min.order))] <- "miRNASeqGene"
+Colors.min.plot[grep(".RPPA", rownames(GGM.all.min.order))] <- "RPPA Array"
+Colors.min.plot[grep(".R2Gn", rownames(GGM.all.min.order))] <- "RNASeq2GeneNorm"
+```
+
+
+```{r fig.width=70, fig.height=8}
+ggplot(GGM.all.min.order, aes(x = reorder(rownames(GGM.all.min.order), -degree), y = degree, color = Colors.min.plot)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.all.min.order$degree), linetype = "dashed", color = "red")  +
+  # 36th unit: top 5%
+  geom_hline(yintercept = GGM.all.min.order[36,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "All Data", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("red", "blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14")
+```
+
+FDRcut 1-1e-6:
+
+```{r}
+P0.all.6 = sparsify(opt.all$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+```
+
+```{r}
+PcorP.6 = pruneMatrix(P0.all.6$sparseParCor)
+Colors.6 <- rownames(PcorP.6)
+Colors.6[grep("hsa", rownames(PcorP.6))] <- "red"
+Colors.6[grep(".RPPA", rownames(PcorP.6))] <- "green"
+Colors.6[grep(".R2Gn", rownames(PcorP.6))] <- "cyan"
+```
+
+```{r, fig.width=40, fig.height=40}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = F)
+set.seed(42)
+Ugraph(PcorP.6, type = "fancy", lay = "layout_with_fr", 
+       Vcolor = Colors.6, Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       main = "All Numerical data\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+#Ugraph(P0.all.6$sparseParCor, type = "fancy", lay = "layout_in_circle", 
+#       Vcolor = Colors, Vsize = 2, Vcex = .1, prune = T, cut = 0.5,
+#       main = "All Numerical data\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+```
+```{r}
+GGM.all.6 = as.data.frame(GGMnetworkStats(P0.all.6$sparseParCor, as.table = T))
+GGM.all.6.order = GGM.all.6[order(GGM.all.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.all.6.order[1:round(nrow(GGM.all.6.order) * 0.05), ]
+```
+
+```{r}
+Colors.6.plot <- rownames(GGM.all.6.order)
+Colors.6.plot[grep("hsa", rownames(GGM.all.6.order))] <- "miRNASeqGene"
+Colors.6.plot[grep(".RPPA", rownames(GGM.all.6.order))] <- "RPPA Array"
+Colors.6.plot[grep(".R2Gn", rownames(GGM.all.6.order))] <- "RNASeq2GeneNorm"
+```
+
+
+```{r fig.width=70, fig.height=8}
+ggplot(GGM.all.6.order, aes(x = reorder(rownames(GGM.all.6.order), -degree), y = degree, color = Colors.6.plot)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.all.6.order$degree), linetype = "dashed", color = "red")  +
+  # 36th unit: top 5%
+  geom_hline(yintercept = GGM.all.6.order[36,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "All Data", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("red", "blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6")
+```
+
+# 2. Split data into alive and dead
+
+## A. RPPAArray
+
+```{r}
+data.RPPA.alive = data.RPPA[which(data.Y == 0), ]
+data.RPPA.dead = data.RPPA[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.RPPA.alive = optPenalty.kCVauto(Y = data.RPPA.alive, lambdaMin = 1e-11, lambdaMax = 10)
+opt.RPPA.dead = optPenalty.kCVauto(Y = data.RPPA.dead, lambdaMin = 1e-11, lambdaMax = 10)
+opt.RPPA.alive$optLambda
+opt.RPPA.dead$optLambda
+```
+
+```{r}
+edgeHeat(opt.RPPA.alive$optPrec, diag = F, textsize = 7)
+edgeHeat(opt.RPPA.dead$optPrec, diag = F, textsize = 7)
+```
+```{r}
+CNplot(covML(data.RPPA.alive),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.RPPA.alive$optLambda)
+CNplot(covML(data.RPPA.dead),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.RPPA.dead$optLambda)
+```
+
+```{r}
+P0.RPPA.alive = sparsify(opt.RPPA.alive$optPrec, threshold = "localFDR", FDRcut=0.9)
+P0.RPPA.dead = sparsify(opt.RPPA.dead$optPrec, threshold = "localFDR", FDRcut=0.9)
+```
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = F)
+set.seed(42)
+Ugraph(P0.RPPA.alive$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 15, Vcex = 1, prune = T, cut = 0.5,
+       main = "RPPA Array data (Surviving patients)\nFDRcutoff at 0.9, Strong Edge cutoff at 0.5")
+Ugraph(P0.RPPA.dead$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 15, Vcex = 1, prune = T, cut = 0.5,
+       main = "RPPA Array data (Deceased patients)\nFDRcutoff at 0.9, Strong Edge cutoff at 0.5")
+#Ugraph(P0.RPPA.alive$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 15, Vcex = 1, prune = T, cut = 0.5,
+#       main = "RPPA Array data (Surviving patients)\nFDRcutoff at 0.9, Strong Edge cutoff at 0.5")
+#Ugraph(P0.RPPA.dead$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 15, Vcex = 1, prune = T, cut = 0.5,
+#       main = "RPPA Array data (Deceased patients)\nFDRcutoff at 0.9, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.RPPA.alive = as.data.frame(GGMnetworkStats(P0.RPPA.alive$sparseParCor, as.table = T))
+GGM.RPPA.dead = as.data.frame(GGMnetworkStats(P0.RPPA.dead$sparseParCor, as.table = T))
+GGM.RPPA.alive.order = GGM.RPPA.alive[order(GGM.RPPA.alive$degree, decreasing = T), ]
+GGM.RPPA.dead.order = GGM.RPPA.dead[order(GGM.RPPA.dead$degree, decreasing = T), ]
+
+#Output top 10
+GGM.RPPA.alive.order[1:10, ]
+GGM.RPPA.dead.order[1:10, ]
+```
+```{r}
+ggplot(GGM.RPPA.alive.order, aes(x = reorder(rownames(GGM.RPPA.alive.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.RPPA.alive.order$degree), linetype = "dashed", color = "red")  +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "blue")  +
+  scale_x_discrete(name = "RPPA Array", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-1, Surviving Patients")
+```
+
+```{r}
+ggplot(GGM.RPPA.dead.order, aes(x = reorder(rownames(GGM.RPPA.dead.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.RPPA.dead.order$degree), linetype = "dashed", color = "red")  +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "blue")  +
+  scale_x_discrete(name = "RPPA Array", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-1, Deceased Patients")
+```
+
+## B. RNASeq2GeneNorm
+
+```{r}
+data.R2Gn.alive = data.R2Gn[which(data.Y == 0), ]
+data.R2Gn.dead = data.R2Gn[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.R2Gn.alive = optPenalty.kCVauto(Y = data.R2Gn.alive, lambdaMin = 1e-11, lambdaMax = 10)
+opt.R2Gn.dead = optPenalty.kCVauto(Y = data.R2Gn.dead, lambdaMin = 1e-11, lambdaMax = 10)
+opt.R2Gn.alive$optLambda
+opt.R2Gn.dead$optLambda
+```
+
+```{r}
+edgeHeat(opt.R2Gn.alive$optPrec, diag = F, textsize = 1)
+edgeHeat(opt.R2Gn.dead$optPrec, diag = F, textsize = 1)
+```
+
+```{r}
+CNplot(covML(data.R2Gn.alive),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.R2Gn.alive$optLambda)
+CNplot(covML(data.R2Gn.dead),
+       lambdaMin = 1e-11,
+       lambdaMax = 1000,
+       step = 5000,
+       Iaids = T,
+       vertical = T,
+       value = opt.R2Gn.dead$optLambda)
+```
+
+Smallest possible FDRcut:
+
+```{r}
+P0.R2Gn.alive.min = sparsify(opt.R2Gn.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+P0.R2Gn.dead.min = sparsify(opt.R2Gn.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+```
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(P0.R2Gn.alive.min$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       main = "RNASeq2GeneNorm data (Surviving Patients)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5")
+Ugraph(P0.R2Gn.dead.min$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       main = "RNASeq2GeneNorm data (Deceased Patients)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5")
+#Ugraph(P0.R2Gn.alive.min$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       main = "RNASeq2GeneNorm data (Surviving Patiens)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5")
+#Ugraph(P0.R2Gn.dead.min$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       main = "RNASeq2GeneNorm data (Deceased Patiens)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.R2Gn.alive.min = as.data.frame(GGMnetworkStats(P0.R2Gn.alive.min$sparseParCor, as.table = T))
+GGM.R2Gn.dead.min = as.data.frame(GGMnetworkStats(P0.R2Gn.dead.min$sparseParCor, as.table = T))
+GGM.R2Gn.alive.min.order = GGM.R2Gn.alive.min[order(GGM.R2Gn.alive.min$degree, decreasing = T), ]
+GGM.R2Gn.dead.min.order = GGM.R2Gn.dead.min[order(GGM.R2Gn.dead.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.R2Gn.alive.min.order[1:round(nrow(GGM.R2Gn.alive.min.order) * 0.05), ]
+GGM.R2Gn.dead.min.order[1:round(nrow(GGM.R2Gn.dead.min.order) * 0.05), ]
+```
+```{r fig.width=20, fig.height=8}
+ggplot(GGM.R2Gn.alive.min.order, aes(x = reorder(rownames(GGM.R2Gn.alive.min.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.R2Gn.alive.min.order$degree), linetype = "dashed", color = "red")  +
+  # 10th unit: top 5%
+  geom_hline(yintercept = GGM.R2Gn.alive.min.order[10,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14, Surviving Patients")
+```
+
+```{r fig.width=20, fig.height=8}
+ggplot(GGM.R2Gn.dead.min.order, aes(x = reorder(rownames(GGM.R2Gn.dead.min.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.R2Gn.dead.min.order$degree), linetype = "dashed", color = "red")  +
+  # 10th unit: top 5%
+  geom_hline(yintercept = GGM.R2Gn.dead.min.order[10,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14, Deceased Patients")
+```
+
+
+FDRcut 1-1e-6:
+
+```{r}
+P0.R2Gn.alive.6 = sparsify(opt.R2Gn.alive$optPrec, threshold = "localFDR", FDRcut= 1-1e-6)
+P0.R2Gn.dead.6 = sparsify(opt.R2Gn.dead$optPrec, threshold = "localFDR", FDRcut= 1-1e-6)
+```
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(P0.R2Gn.alive.6$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       main = "RNASeq2GeneNorm data (Surviving Patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+Ugraph(P0.R2Gn.dead.6$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       main = "RNASeq2GeneNorm data (Deceased Patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+#Ugraph(P0.R2Gn.alive.6$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       main = "RNASeq2GeneNorm data (Surviving Patiens)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+#Ugraph(P0.R2Gn.dead.6$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       main = "RNASeq2GeneNorm data (Deceased Patiens)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.R2Gn.alive.6 = as.data.frame(GGMnetworkStats(P0.R2Gn.alive.6$sparseParCor, as.table = T))
+GGM.R2Gn.dead.6 = as.data.frame(GGMnetworkStats(P0.R2Gn.dead.6$sparseParCor, as.table = T))
+GGM.R2Gn.alive.6.order = GGM.R2Gn.alive.6[order(GGM.R2Gn.alive.6$degree, decreasing = T), ]
+GGM.R2Gn.dead.6.order = GGM.R2Gn.dead.6[order(GGM.R2Gn.dead.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.R2Gn.alive.6.order[1:round(nrow(GGM.R2Gn.alive.6.order) * 0.05), ]
+GGM.R2Gn.dead.6.order[1:round(nrow(GGM.R2Gn.dead.6.order) * 0.05), ]
+```
+```{r fig.width=20, fig.height=8}
+ggplot(GGM.R2Gn.alive.6.order, aes(x = reorder(rownames(GGM.R2Gn.alive.6.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.R2Gn.alive.6.order$degree), linetype = "dashed", color = "red")  +
+  # 10th unit: top 5%
+  geom_hline(yintercept = GGM.R2Gn.alive.6.order[10,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Surviving Patients")
+```
+
+```{r fig.width=20, fig.height=8}
+ggplot(GGM.R2Gn.dead.6.order, aes(x = reorder(rownames(GGM.R2Gn.dead.6.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.R2Gn.dead.6.order$degree), linetype = "dashed", color = "red")  +
+  # 10th unit: top 5%
+  geom_hline(yintercept = GGM.R2Gn.dead.6.order[10,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Deceased Patients")
+```
+
+
+## C. miRNASeqGene
+
+```{r}
+data.mRSG.alive = data.mRSG[which(data.Y == 0), ]
+data.mRSG.dead = data.mRSG[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.mRSG.alive = optPenalty.kCVauto(Y = data.mRSG.alive, lambdaMin = 1e-11, lambdaMax = 10)
+opt.mRSG.alive$optLambda
+```
+```{r}
+set.seed(42)
+
+# Warning: If lambdaMax is set to 1000, lambda will be stuck at 1000
+# Setting lambdaMax = 10 avoids this issue
+
+opt.mRSG.dead = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 10)
+#opt.mRSG.dead.10 = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+#opt.mRSG.dead.5 = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+#opt.mRSG.dead.3 = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+#setNames(c(3,5,10,43), c(opt.mRSG.dead.3$optLambda, opt.mRSG.dead.5$optLambda, opt.mRSG.dead.10$optLambda, opt.mRSG.dead$optLambda))
+opt.mRSG.dead$optLambda
+```
+
+```{r}
+edgeHeat(opt.mRSG.alive$optPrec, diag = F, textsize = 1)
+edgeHeat(opt.mRSG.dead$optPrec, diag = F, textsize = 1)
+```
+Smallest possible FDRcut: 
+
+```{r}
+P0.mRSG.alive.min = sparsify(opt.mRSG.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-13)
+P0.mRSG.dead.min = sparsify(opt.mRSG.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-13)
+```
+
+```{r fig.width=40, fig.height=40}
+set.seed(42)
+Ugraph(P0.mRSG.alive.min$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5, main = "miRNASeqGene data (Surviving Patients)\nFDRcutoff at 1-1e-13, Strong Edge cutoff at 0.5")
+Ugraph(P0.mRSG.dead.min$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5, main = "miRNASeqGene data (Deceased Patients)\nFDRcutoff at 1-1e-13, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.mRSG.alive.min = as.data.frame(GGMnetworkStats(P0.mRSG.alive.min$sparseParCor, as.table = T))
+GGM.mRSG.dead.min = as.data.frame(GGMnetworkStats(P0.mRSG.dead.min$sparseParCor, as.table = T))
+GGM.mRSG.alive.min.order = GGM.mRSG.alive.min[order(GGM.mRSG.alive.min$degree, decreasing = T), ]
+GGM.mRSG.dead.min.order = GGM.mRSG.dead.min[order(GGM.mRSG.dead.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.mRSG.alive.min.order[1:round(nrow(GGM.mRSG.alive.min.order) * 0.05), ]
+GGM.mRSG.dead.min.order[1:round(nrow(GGM.mRSG.dead.min.order) * 0.05), ]
+```
+
+```{r fig.width=47, fig.height=8}
+ggplot(GGM.mRSG.alive.min.order, aes(x = reorder(rownames(GGM.mRSG.alive.min.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.mRSG.alive.min.order$degree), linetype = "dashed", color = "red")  +
+  # 24th unit: top 5%
+  geom_hline(yintercept = GGM.mRSG.alive.min.order[24,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "miRNASeqGene", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-13, Surviving Patients")
+```
+
+```{r fig.width=47, fig.height=8}
+ggplot(GGM.mRSG.dead.min.order, aes(x = reorder(rownames(GGM.mRSG.dead.min.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.mRSG.dead.min.order$degree), linetype = "dashed", color = "red")  +
+  # 24th unit: top 5%
+  geom_hline(yintercept = GGM.mRSG.dead.min.order[24,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "miRNASeqGene", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-13, Deceased Patients")
+```
+FDRcut 1-1e-6:
+
+```{r}
+P0.mRSG.alive.6 = sparsify(opt.mRSG.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+P0.mRSG.dead.6 = sparsify(opt.mRSG.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+```
+
+```{r fig.width=40, fig.height=40}
+set.seed(42)
+Ugraph(P0.mRSG.alive.6$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5, main = "miRNASeqGene data (Surviving Patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+Ugraph(P0.mRSG.dead.6$sparseParCor, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5, main = "miRNASeqGene data (Deceased Patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5")
+```
+```{r}
+GGM.mRSG.alive.6 = as.data.frame(GGMnetworkStats(P0.mRSG.alive.6$sparseParCor, as.table = T))
+GGM.mRSG.dead.6 = as.data.frame(GGMnetworkStats(P0.mRSG.dead.6$sparseParCor, as.table = T))
+GGM.mRSG.alive.6.order = GGM.mRSG.alive.6[order(GGM.mRSG.alive.6$degree, decreasing = T), ]
+GGM.mRSG.dead.6.order = GGM.mRSG.dead.6[order(GGM.mRSG.dead.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.mRSG.alive.6.order[1:round(nrow(GGM.mRSG.alive.6.order) * 0.05), ]
+GGM.mRSG.dead.6.order[1:round(nrow(GGM.mRSG.dead.6.order) * 0.05), ]
+```
+
+```{r fig.width=47, fig.height=8}
+ggplot(GGM.mRSG.alive.6.order, aes(x = reorder(rownames(GGM.mRSG.alive.6.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.mRSG.alive.6.order$degree), linetype = "dashed", color = "red")  +
+  # 24th unit: top 5%
+  geom_hline(yintercept = GGM.mRSG.alive.6.order[24,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "miRNASeqGene", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Surviving Patients")
+```
+
+```{r fig.width=47, fig.height=8}
+ggplot(GGM.mRSG.dead.6.order, aes(x = reorder(rownames(GGM.mRSG.dead.6.order), -degree), y = degree)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.mRSG.dead.6.order$degree), linetype = "dashed", color = "red")  +
+  # 24th unit: top 5%
+  geom_hline(yintercept = GGM.mRSG.dead.6.order[24,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "miRNASeqGene", guide = guide_axis(angle = 90)) +
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Deceased Patients")
+```
+
+## D. All Data
+
+```{r}
+data.all.alive = data.numeric[which(data.Y == 0), ]
+data.all.dead = data.numeric[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.all.alive = optPenalty.kCVauto(Y = data.all.alive, lambdaMin = 1e-11, lambdaMax = 10)
+opt.all.alive$optLambda
+```
+```{r}
+set.seed(42)
+
+#Warning: NA/Inf replaced by maximum positive value, lambda stuck at 1000
+#Same as above, solved by setting lambdaMax = 10 instead of 1000
+
+opt.all.dead = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 10)
+#opt.all.dead.10 = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+#opt.all.dead.5 = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+#opt.all.dead.3 = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+#setNames(c(3,5,10,43), c(opt.all.dead.3$optLambda, opt.all.dead.5$optLambda, opt.all.dead.10$optLambda, opt.all.dead$optLambda))
+opt.all.dead$optLambda
+```
+
+```{r}
+edgeHeat(opt.all.alive$optPrec, diag = F, textsize = 1)
+edgeHeat(opt.all.dead$optPrec, diag = F, textsize = 1)
+```
+Smallest possible FDRcut:
+
+```{r}
+P0.all.alive.min = sparsify(opt.all.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+P0.all.dead.min = sparsify(opt.all.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+```
+```{r}
+PcorP.a.min = pruneMatrix(P0.all.alive.min$sparseParCor)
+Colors.a.min <- rownames(PcorP.a.min)
+Colors.a.min[grep("hsa", rownames(PcorP.a.min))] <- "red"
+Colors.a.min[grep(".RPPA", rownames(PcorP.a.min))] <- "green"
+Colors.a.min[grep(".R2Gn", rownames(PcorP.a.min))] <- "cyan"
+```
+
+```{r}
+PcorP.d.min = pruneMatrix(P0.all.dead.min$sparseParCor)
+Colors.d.min <- rownames(PcorP.d.min)
+Colors.d.min[grep("hsa", rownames(PcorP.d.min))] <- "red"
+Colors.d.min[grep(".RPPA", rownames(PcorP.d.min))] <- "green"
+Colors.d.min[grep(".R2Gn", rownames(PcorP.d.min))] <- "cyan"
+```
+
+```{r fig.width=40, fig.height=40}
+set.seed(42)
+Ugraph(PcorP.a.min, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       Vcolor = Colors.a.min,
+       main = "All Numerical data (Surviving patients)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+Ugraph(PcorP.d.min, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       Vcolor = Colors.d.min,
+       main = "All Numerical data (Deceased patients)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+```
+
+```{r}
+GGM.all.alive.min = as.data.frame(GGMnetworkStats(P0.all.alive.min$sparseParCor, as.table = T))
+GGM.all.dead.min = as.data.frame(GGMnetworkStats(P0.all.dead.min$sparseParCor, as.table = T))
+GGM.all.alive.min.order = GGM.all.alive.min[order(GGM.all.alive.min$degree, decreasing = T), ]
+GGM.all.dead.min.order = GGM.all.dead.min[order(GGM.all.dead.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.all.alive.min.order[1:round(nrow(GGM.all.alive.min.order) * 0.05), ]
+GGM.all.dead.min.order[1:round(nrow(GGM.all.dead.min.order) * 0.05), ]
+```
+```{r}
+Colors.min.plot.a <- rownames(GGM.all.alive.min.order)
+Colors.min.plot.a[grep("hsa", rownames(GGM.all.alive.min.order))] <- "miRNASeqGene"
+Colors.min.plot.a[grep(".RPPA", rownames(GGM.all.alive.min.order))] <- "RPPA Array"
+Colors.min.plot.a[grep(".R2Gn", rownames(GGM.all.alive.min.order))] <- "RNASeq2GeneNorm"
+```
+
+
+```{r fig.width=70, fig.height=8}
+ggplot(GGM.all.alive.min.order, aes(x = reorder(rownames(GGM.all.alive.min.order), -degree), y = degree, color = Colors.min.plot.a)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.all.alive.min.order$degree), linetype = "dashed", color = "red")  +
+  # 36th unit: top 5%
+  geom_hline(yintercept = GGM.all.alive.min.order[36,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "All Data", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("red", "blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14, Surviving Patients")
+```
+```{r}
+Colors.min.plot.d <- rownames(GGM.all.dead.min.order)
+Colors.min.plot.d[grep("hsa", rownames(GGM.all.dead.min.order))] <- "miRNASeqGene"
+Colors.min.plot.d[grep(".RPPA", rownames(GGM.all.dead.min.order))] <- "RPPA Array"
+Colors.min.plot.d[grep(".R2Gn", rownames(GGM.all.dead.min.order))] <- "RNASeq2GeneNorm"
+```
+
+```{r fig.width=70, fig.height=8}
+ggplot(GGM.all.dead.min.order, aes(x = reorder(rownames(GGM.all.dead.min.order), -degree), y = degree, color = Colors.min.plot.d)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.all.dead.min.order$degree), linetype = "dashed", color = "red")  +
+  # 36th unit: top 5%
+  geom_hline(yintercept = GGM.all.dead.min.order[36,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "All Data", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("red", "blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14, Deceased Patients")
+```
+
+FDRcut 1-1e-6:
+
+```{r}
+P0.all.alive.6 = sparsify(opt.all.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+P0.all.dead.6 = sparsify(opt.all.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+```
+```{r}
+PcorP.a.6 = pruneMatrix(P0.all.alive.6$sparseParCor)
+Colors.a.6 <- rownames(PcorP.a.6)
+Colors.a.6[grep("hsa", rownames(PcorP.a.6))] <- "red"
+Colors.a.6[grep(".RPPA", rownames(PcorP.a.6))] <- "green"
+Colors.a.6[grep(".R2Gn", rownames(PcorP.a.6))] <- "cyan"
+```
+
+```{r}
+PcorP.d.6 = pruneMatrix(P0.all.dead.6$sparseParCor)
+Colors.d.6 <- rownames(PcorP.d.6)
+Colors.d.6[grep("hsa", rownames(PcorP.d.6))] <- "red"
+Colors.d.6[grep(".RPPA", rownames(PcorP.d.6))] <- "green"
+Colors.d.6[grep(".R2Gn", rownames(PcorP.d.6))] <- "cyan"
+```
+
+```{r fig.width=40, fig.height=40}
+set.seed(42)
+Ugraph(PcorP.a.6, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       Vcolor = Colors.a.6,
+       main = "All Numerical data (Surviving patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+Ugraph(PcorP.d.6, type = "fancy", lay = "layout_with_fr", Vsize = 2, Vcex = .3, prune = T, cut = 0.5,
+       Vcolor = Colors.d.6,
+       main = "All Numerical data (Deceased patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\nRed: miRNASeqGene; Blue: RNASeq2GeneNorm; Green: RPPA Array")
+```
+
+```{r}
+GGM.all.alive.6 = as.data.frame(GGMnetworkStats(P0.all.alive.6$sparseParCor, as.table = T))
+GGM.all.dead.6 = as.data.frame(GGMnetworkStats(P0.all.dead.6$sparseParCor, as.table = T))
+GGM.all.alive.6.order = GGM.all.alive.6[order(GGM.all.alive.6$degree, decreasing = T), ]
+GGM.all.dead.6.order = GGM.all.dead.6[order(GGM.all.dead.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.all.alive.6.order[1:round(nrow(GGM.all.alive.6.order) * 0.05), ]
+GGM.all.dead.6.order[1:round(nrow(GGM.all.dead.6.order) * 0.05), ]
+```
+```{r}
+Colors.6.plot.a <- rownames(GGM.all.alive.6.order)
+Colors.6.plot.a[grep("hsa", rownames(GGM.all.alive.6.order))] <- "miRNASeqGene"
+Colors.6.plot.a[grep(".RPPA", rownames(GGM.all.alive.6.order))] <- "RPPA Array"
+Colors.6.plot.a[grep(".R2Gn", rownames(GGM.all.alive.6.order))] <- "RNASeq2GeneNorm"
+```
+
+
+```{r fig.width=70, fig.height=8}
+ggplot(GGM.all.alive.6.order, aes(x = reorder(rownames(GGM.all.alive.6.order), -degree), y = degree, color = Colors.6.plot.a)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.all.alive.6.order$degree), linetype = "dashed", color = "red")  +
+  # 36th unit: top 5%
+  geom_hline(yintercept = GGM.all.alive.6.order[36,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "All Data", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("red", "blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Surviving Patients")
+```
+```{r}
+Colors.6.plot.d <- rownames(GGM.all.dead.6.order)
+Colors.6.plot.d[grep("hsa", rownames(GGM.all.dead.6.order))] <- "miRNASeqGene"
+Colors.6.plot.d[grep(".RPPA", rownames(GGM.all.dead.6.order))] <- "RPPA Array"
+Colors.6.plot.d[grep(".R2Gn", rownames(GGM.all.dead.6.order))] <- "RNASeq2GeneNorm"
+```
+
+```{r fig.width=70, fig.height=8}
+ggplot(GGM.all.dead.6.order, aes(x = reorder(rownames(GGM.all.dead.6.order), -degree), y = degree, color = Colors.6.plot.d)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.all.dead.6.order$degree), linetype = "dashed", color = "red")  +
+  # 36th unit: top 5%
+  geom_hline(yintercept = GGM.all.dead.6.order[36,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "All Data", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("red", "blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Deceased Patients")
+```
+
+# Save Gaussian Graphical Model Newotk Statistics to file
+
+The variables are order by degree (number of edges connected to variable node)
+
+```{r}
+out.RPPA = list("FDR1e-1" = GGM.RPPA.order)
+out.R2Gn = list("FDR1e-6" = GGM.R2Gn.6.order,
+                "FDR1e-14" = GGM.R2Gn.min.order)
+out.mRSG = list("FDR1e-6" = GGM.mRSG.6.order,
+                "FDR1e-13" = GGM.mRSG.min.order)
+out.all = list("FDR1e-6" = GGM.all.6.order,
+               "FDR1e-14" = GGM.all.min.order)
+
+out.RPPA.alive = list("FDR1e-1" = GGM.RPPA.alive.order)
+out.RPPA.dead = list("FDR1e-1" = GGM.RPPA.dead.order)
+
+out.R2Gn.alive = list("FDR1e-6" = GGM.R2Gn.alive.6.order,
+                      "FDR1e-14" = GGM.R2Gn.alive.min.order)
+out.R2Gn.dead = list("FDR1e-6" = GGM.R2Gn.dead.6.order,
+                      "FDR1e-14" = GGM.R2Gn.dead.min.order)
+#out.PR.alive = list("FDR1e-6" = GGM.PR.alive.6.order,
+#                    "FDR1e-14" = GGM.PR.alive.min.order)
+#out.PR.dead = list("FDR1e-6" = GGM.PR.dead.6.order,
+#                   "FDR1e-14" = GGM.PR.dead.min.order)
+out.mRSG.alive = list("FDR1e-6" = GGM.mRSG.alive.6.order,
+                      "FDR1e-13" = GGM.mRSG.alive.min.order)
+out.mRSG.dead = list("FDR1e-6" = GGM.mRSG.dead.6.order,
+                      "FDR1e-13" = GGM.mRSG.dead.min.order)
+out.all.alive = list("FDR1e-6" = GGM.all.alive.6.order,
+                    "FDR1e-14" = GGM.all.alive.min.order)
+out.all.dead = list("FDR1e-6" = GGM.all.dead.6.order,
+                   "FDR1e-14" = GGM.all.dead.min.order)
+
+out.RPPA.ad = list("alive" = out.RPPA.alive,
+                   "dead" = out.RPPA.dead)
+out.R2Gn.ad = list("alive" = out.R2Gn.alive,
+                   "dead" = out.R2Gn.dead)
+#out.PR.ad = list("alive" = out.PR.alive,
+#                 "dead" = out.PR.dead)
+out.mRSG.ad = list("alive" = out.mRSG.alive,
+                   "dead" = out.mRSG.dead)
+out.all.ad = list("alive" = out.all.alive,
+                   "dead" = out.all.dead)
+
+out.fullsample = list("RPPA Array" = out.RPPA,
+                   "RNASeq2GeneNorm" = out.R2Gn,
+                   "miRNASeqGene" = out.mRSG,
+                   "all" = out.all)
+
+out.splitbyad = list("RPPA Array" = out.RPPA.ad,
+                   "RNASeq2GeneNorm" = out.R2Gn.ad,
+                   #"RPPA + R2Gn" = out.PR.ad)
+                   "miRNASeqGene" = out.mRSG.ad,
+                   "all" = out.all.ad)
+
+out.ggm = list("full_sample" = out.fullsample,
+           "by_vital_status" = out.splitbyad)
+
+saveRDS(out.ggm, file = "data/sel_features/results_ggm_network_stats_all.rds")
+```
+
+
+The code below are not executed.
+
+The below was a replacement for the "all dataset search" as optimal lambda was once considered not found for deceased patients , for miRNASeqGene and all data. They are no longer needed when lambda can be found with lambdaMax set to 10 instead of 1000.
+
+## F. RPPA Array + RNASeq2GeneNorm
+
+```{r, eval=F}
+data.PR = data.numeric[, c(group.RPPA, group.R2Gn)]
+```
+
+```{r, eval=F}
+data.PR.alive = data.PR[which(data.Y == 0), ]
+data.PR.dead = data.PR[which(data.Y == 1), ]
+```
+
+```{r, eval=F}
+set.seed(42)
+opt.PR.alive = optPenalty.kCVauto(Y = data.PR.alive, lambdaMin = 1e-11, lambdaMax = 10)
+opt.PR.dead = optPenalty.kCVauto(Y = data.PR.dead, lambdaMin = 1e-11, lambdaMax = 10)
+opt.PR.alive$optLambda
+opt.PR.dead$optLambda
+```
+
+```{r, eval=F}
+edgeHeat(opt.PR.alive$optPrec, diag = F, textsize = 1)
+edgeHeat(opt.PR.dead$optPrec, diag = F, textsize = 1)
+```
+
+Smallest possible FDRcut:
+
+```{r, eval=F}
+P0.PR.alive.min = sparsify(opt.PR.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+P0.PR.dead.min = sparsify(opt.PR.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-14)
+```
+Colors for the different omics:
+
+```{r, eval=F}
+PcorP.PR.a.min = pruneMatrix(P0.PR.alive.min$sparseParCor)
+Colors.PR.a.min = rownames(PcorP.PR.a.min)
+Colors.PR.a.min[grep(".RPPA", rownames(PcorP.PR.a.min))] <- "green"
+Colors.PR.a.min[grep(".R2Gn", rownames(PcorP.PR.a.min))] <- "cyan"
+```
+
+```{r, eval=F}
+PcorP.PR.d.min = pruneMatrix(P0.PR.dead.min$sparseParCor)
+Colors.PR.d.min = rownames(PcorP.PR.d.min)
+Colors.PR.d.min[grep(".RPPA", rownames(PcorP.PR.d.min))] <- "green"
+Colors.PR.d.min[grep(".R2Gn", rownames(PcorP.PR.d.min))] <- "cyan"
+```
+
+```{r, eval=F}
+#fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(PcorP.PR.a.min, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       Vcolor = Colors.PR.a.min,
+       main = "RPPA Array + RNASeq2GeneNorm data (Surviving Patients)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\n Blue: RNASeq2Gene; Green:RPPA Array")
+Ugraph(PcorP.PR.d.min, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       Vcolor = Colors.PR.d.min,
+       main = "RPPA Array + RNASeq2GeneNorm data (Deceased Patients)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\n Blue: RNASeq2Gene; Green:RPPA Array")
+
+#Ugraph(P0.PR.alive.min$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       Vcolor = Colors.PR,
+#       main = "RPPA Array + RNASeq2GeneNorm data (Surviving Patiens)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\\n Blue: RNASeq2Gene; Green:RPPA Array")
+#Ugraph(P0.PR.dead.min$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       Vcolor = Colors.PR,
+#       main = "RPPA Array + RNASeq2GeneNorm data (Deceased Patiens)\nFDRcutoff at 1-1e-14, Strong Edge cutoff at 0.5\n Blue: RNASeq2Gene; Green:RPPA Array")
+```
+```{r, eval=F}
+GGM.PR.alive.min = as.data.frame(GGMnetworkStats(P0.PR.alive.min$sparseParCor, as.table = T))
+GGM.PR.dead.min = as.data.frame(GGMnetworkStats(P0.PR.dead.min$sparseParCor, as.table = T))
+GGM.PR.alive.min.order = GGM.PR.alive.min[order(GGM.PR.alive.min$degree, decreasing = T), ]
+GGM.PR.dead.min.order = GGM.PR.dead.min[order(GGM.PR.dead.min$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.PR.alive.min.order[1:round(nrow(GGM.PR.alive.min.order) * 0.05), ]
+GGM.PR.dead.min.order[1:round(nrow(GGM.PR.dead.min.order) * 0.05), ]
+```
+```{r, eval=F}
+Colors.min.plot.a <- rownames(GGM.PR.alive.min.order)
+#Colors.min.plot.a[grep("hsa", rownames(GGM.PR.alive.min.order))] <- "red"
+Colors.min.plot.a[grep(".RPPA", rownames(GGM.PR.alive.min.order))] <- "RPPA Array"
+Colors.min.plot.a[grep(".R2Gn", rownames(GGM.PR.alive.min.order))] <- "RNASeq2GeneNorm"
+```
+
+
+```{r, eval=F}
+#fig.width=24, fig.height=8}
+ggplot(GGM.PR.alive.min.order, aes(x = reorder(rownames(GGM.PR.alive.min.order), -degree), y = degree, color = Colors.min.plot.a)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.PR.alive.min.order$degree), linetype = "dashed", color = "red")  +
+  # 12th unit: top 5%
+  geom_hline(yintercept = GGM.PR.alive.min.order[12,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RPPA Array + RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14, Surviving Patients")
+```
+```{r, eval=F}
+Colors.min.plot.d <- rownames(GGM.PR.dead.min.order)
+#Colors.min.plot.d[grep("hsa", rownames(GGM.PR.dead.min.order))] <- "red"
+Colors.min.plot.d[grep(".RPPA", rownames(GGM.PR.dead.min.order))] <- "RPPA Array"
+Colors.min.plot.d[grep(".R2Gn", rownames(GGM.PR.dead.min.order))] <- "RNASeq2GeneNorm"
+```
+
+```{r, eval=F}
+#fig.width=24, fig.height=8}
+ggplot(GGM.PR.dead.min.order, aes(x = reorder(rownames(GGM.PR.dead.min.order), -degree), y = degree, color = Colors.min.plot.d)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.PR.dead.min.order$degree), linetype = "dashed", color = "red")  +
+  # 12th unit: top 5%
+  geom_hline(yintercept = GGM.PR.dead.min.order[12,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RPPA Array + RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-14, Deceased Patients")
+```
+
+FDRcut 1e-6:
+
+```{r, eval=F}
+P0.PR.alive.6 = sparsify(opt.PR.alive$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+P0.PR.dead.6 = sparsify(opt.PR.dead$optPrec, threshold = "localFDR", FDRcut=1-1e-6)
+```
+```{r, eval=F}
+PcorP.PR.a.6 = pruneMatrix(P0.PR.alive.6$sparseParCor)
+Colors.PR.a.6 = rownames(PcorP.PR.a.6)
+Colors.PR.a.6[grep(".RPPA", rownames(PcorP.PR.a.6))] <- "green"
+Colors.PR.a.6[grep(".R2Gn", rownames(PcorP.PR.a.6))] <- "cyan"
+```
+
+```{r, eval=F}
+PcorP.PR.d.6 = pruneMatrix(P0.PR.dead.6$sparseParCor)
+Colors.PR.d.6 = rownames(PcorP.PR.d.6)
+Colors.PR.d.6[grep(".RPPA", rownames(PcorP.PR.d.6))] <- "green"
+Colors.PR.d.6[grep(".R2Gn", rownames(PcorP.PR.d.6))] <- "cyan"
+```
+
+```{r, eval=F}
+# fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRstudioGD = F)
+set.seed(42)
+Ugraph(PcorP.PR.a.6, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       Vcolor = Colors.PR.a.6,
+       main = "RPPA Array + RNASeq2GeneNorm data (Surviving Patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\n Blue: RNASeq2Gene; Green:RPPA Array")
+Ugraph(PcorP.PR.d.6, type = "fancy", lay = "layout_with_fr", Vsize = 5, Vcex = .4, prune = T, cut = 0.5,
+       Vcolor = Colors.PR.d.6,
+       main = "RPPA Array + RNASeq2GeneNorm data (Deceased Patients)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\n Blue: RNASeq2Gene; Green:RPPA Array")
+
+#Ugraph(P0.PR.alive.6$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       Vcolor = Colors.PR,
+#       main = "RPPA Array + RNASeq2GeneNorm data (Surviving Patiens)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\\n Blue: RNASeq2Gene; Green:RPPA Array")
+#Ugraph(P0.PR.dead.6$sparseParCor, type = "fancy", lay = "layout_in_circle", Vsize = 5, Vcex = .1, prune = T, cut = 0.5,
+#       Vcolor = Colors.PR,
+#       main = "RPPA Array + RNASeq2GeneNorm data (Deceased Patiens)\nFDRcutoff at 1-1e-6, Strong Edge cutoff at 0.5\n Blue: RNASeq2Gene; Green:RPPA Array")
+```
+```{r, eval=F}
+GGM.PR.alive.6 = as.data.frame(GGMnetworkStats(P0.PR.alive.6$sparseParCor, as.table = T))
+GGM.PR.dead.6 = as.data.frame(GGMnetworkStats(P0.PR.dead.6$sparseParCor, as.table = T))
+GGM.PR.alive.6.order = GGM.PR.alive.6[order(GGM.PR.alive.6$degree, decreasing = T), ]
+GGM.PR.dead.6.order = GGM.PR.dead.6[order(GGM.PR.dead.6$degree, decreasing = T), ]
+
+#Output top 5%
+GGM.PR.alive.6.order[1:round(nrow(GGM.PR.alive.6.order) * 0.05), ]
+GGM.PR.dead.6.order[1:round(nrow(GGM.PR.dead.6.order) * 0.05), ]
+```
+```{r, eval=F}
+Colors.6.plot.a <- rownames(GGM.PR.alive.6.order)
+#Colors.6.plot.a[grep("hsa", rownames(GGM.PR.alive.6.order))] <- "red"
+Colors.6.plot.a[grep(".RPPA", rownames(GGM.PR.alive.6.order))] <- "RPPA Array"
+Colors.6.plot.a[grep(".R2Gn", rownames(GGM.PR.alive.6.order))] <- "RNASeq2GeneNorm"
+```
+
+
+```{r, eval=F}
+#fig.width=24, fig.height=8}
+ggplot(GGM.PR.alive.6.order, aes(x = reorder(rownames(GGM.PR.alive.6.order), -degree), y = degree, color = Colors.6.plot.a)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.PR.alive.6.order$degree), linetype = "dashed", color = "red")  +
+  # 12th unit: top 5%
+  geom_hline(yintercept = GGM.PR.alive.6.order[12,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RPPA Array + RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Surviving Patients")
+```
+```{r, eval=F}
+Colors.6.plot.d <- rownames(GGM.PR.dead.6.order)
+#Colors.6.plot.d[grep("hsa", rownames(GGM.PR.dead.6.order))] <- "red"
+Colors.6.plot.d[grep(".RPPA", rownames(GGM.PR.dead.6.order))] <- "RPPA Array"
+Colors.6.plot.d[grep(".R2Gn", rownames(GGM.PR.dead.6.order))] <- "RNASeq2GeneNorm"
+```
+
+```{r, eval=F}
+#fig.width=24, fig.height=8}
+ggplot(GGM.PR.dead.6.order, aes(x = reorder(rownames(GGM.PR.dead.6.order), -degree), y = degree, color = Colors.6.plot.d)) +
+  geom_point() +
+  geom_hline(yintercept = mean(GGM.PR.dead.6.order$degree), linetype = "dashed", color = "red")  +
+  # 12th unit: top 5%
+  geom_hline(yintercept = GGM.PR.dead.6.order[12,]$degree, linetype = "dashed", color = "darkgreen")  +
+  scale_x_discrete(name = "RPPA Array + RNASeq2GeneNorm", guide = guide_axis(angle = 90)) +
+  scale_color_manual(values = c("blue", "green3"))+
+  ggtitle("Variables sorted by degree, FDR = 1-1e-6, Deceased Patients")
+```
+

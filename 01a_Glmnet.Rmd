@@ -1,0 +1,468 @@
+---
+title: "Ridge & Lasso using Glmnet"
+author: "John Zhuang"
+date: "2024-06-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Data Preparation
+
+```{r}
+library(glmnet)
+```
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_joined.rds")
+```
+
+## A. Check for missingness of columns
+```{r}
+missing = colSums(is.na(data.horizontal))
+missing[which(missing > 0)]
+```
+
+These columns have missing data and will thus be removed from the data.
+
+```{r}
+data.glmnet = data.horizontal[, which(missing == 0)]
+```
+
+# 1. Ridge, Lasso and Elastic Net using Glmnet
+
+```{r}
+## Perform cross validation using glmnet in order to find the best lambda
+## for shrinkage, selection or both.
+
+vs.cv.glm = function(alpha, measure, fold = 10) {
+                    # Column 1000 is vital_status, the disease outcome
+  model = cv.glmnet(x = data.matrix(data.glmnet[, !names(data.glmnet) %in% c("vital_status", "event_time")]), 
+                    y = data.matrix(data.glmnet$vital_status),
+                    alpha = alpha, # 0 for Ridge, 1 for Lasso, 0 < alpha < 1 for Elastic Net
+                    family = "binomial", # Outcome is Binomial
+                    type.measure = measure,
+                    nfolds = fold,
+                    standardize = T)
+}
+```
+
+## A. 10-fold Glmnet
+
+```{r}
+set.seed(42)
+mse.0_10 = vs.cv.glm(0, measure = "mse")
+mse.0.5_10 = vs.cv.glm(0.5, measure = "mse")
+mse.1_10 = vs.cv.glm(1, measure = "mse")
+
+dev.0_10 = vs.cv.glm(0, measure = "deviance")
+dev.0.5_10 = vs.cv.glm(0.5, measure = "deviance")
+dev.1_10 = vs.cv.glm(1, measure = "deviance")
+
+#Warning: Too few (< 10) observations per fold for type.measure='auc'
+
+auc.0_10 = vs.cv.glm(0, measure = "auc")
+auc.0.5_10 = vs.cv.glm(0.5, measure = "auc")
+auc.1_10 = vs.cv.glm(1, measure = "auc")
+```
+
+```{r}
+out.ridge_10 = list("mse" = mse.0_10,
+                "dev" = dev.0_10)#,
+                #"auc" = auc.0_10)
+
+out.elasticnet_10 = list("mse" = mse.0.5_10,
+                         "dev" = dev.0.5_10)#,
+                         #"auc" = auc.0.5_10)
+
+out.lasso_10 = list("mse" = mse.1_10,
+                "dev" = dev.1_10)#,
+                #"auc" = auc.1_10)
+
+out.glmnet_10 = list("ridge" = out.ridge_10,
+                 "elasticnet_0.5" = out.elasticnet_10,
+                 "lasso" = out.lasso_10)
+```
+
+```{r}
+saveRDS(out.glmnet_10, file = "data/out_models/results_glmnet_10folds.rds")
+```
+
+## B. 5-fold Glmnet
+
+```{r}
+set.seed(42)
+mse.0_5 = vs.cv.glm(0, measure = "mse", fold = 5)
+mse.0.5_5 = vs.cv.glm(0.5, measure = "mse", fold = 5)
+mse.1_5 = vs.cv.glm(1, measure = "mse", fold = 5)
+
+dev.0_5 = vs.cv.glm(0, measure = "deviance", fold = 5)
+dev.0.5_5 = vs.cv.glm(0.5, measure = "deviance", fold = 5)
+dev.1_5 = vs.cv.glm(1, measure = "deviance", fold = 5)
+
+#Warning: Too few (< 10) observations per fold for type.measure='auc'
+
+auc.0_5 = vs.cv.glm(0, measure = "auc", fold = 5)
+auc.0.5_5 = vs.cv.glm(0.5, measure = "auc", fold = 5)
+auc.1_5 = vs.cv.glm(1, measure = "auc", fold = 5)
+```
+
+```{r}
+out.ridge_5 = list("mse" = mse.0_5,
+                "dev" = dev.0_5)#,
+                #"auc" = auc.0_5)
+
+out.elasticnet_5 = list("mse" = mse.0.5_5,
+                         "dev" = dev.0.5_5)#,
+                         #"auc" = auc.0.5_5)
+
+out.lasso_5 = list("mse" = mse.1_5,
+                "dev" = dev.1_5)#,
+                #"auc" = auc.1_5)
+
+out.glmnet_5 = list("ridge" = out.ridge_5,
+                 "elasticnet_0.5" = out.elasticnet_5,
+                 "lasso" = out.lasso_5)
+```
+
+```{r}
+saveRDS(out.glmnet_5, file = "data/out_models/results_glmnet_5folds.rds")
+```
+
+## C. 3-fold Glmnet
+
+```{r}
+set.seed(42)
+mse.0_3 = vs.cv.glm(0, measure = "mse", fold = 3)
+mse.0.5_3 = vs.cv.glm(0.5, measure = "mse", fold = 3)
+mse.1_3 = vs.cv.glm(1, measure = "mse", fold = 3)
+
+dev.0_3 = vs.cv.glm(0, measure = "deviance", fold = 3)
+dev.0.5_3 = vs.cv.glm(0.5, measure = "deviance", fold = 3)
+dev.1_3 = vs.cv.glm(1, measure = "deviance", fold = 3)
+
+
+auc.0_3 = vs.cv.glm(0, measure = "auc", fold = 3)
+auc.0.5_3 = vs.cv.glm(0.5, measure = "auc", fold = 3)
+auc.1_3 = vs.cv.glm(1, measure = "auc", fold = 3)
+```
+
+```{r}
+out.ridge_3 = list("mse" = mse.0_3,
+                "dev" = dev.0_3,
+                "auc" = auc.0_3)
+
+out.elasticnet_3 = list("mse" = mse.0.5_3,
+                         "dev" = dev.0.5_3,
+                         "auc" = auc.0.5_3)
+
+out.lasso_3 = list("mse" = mse.1_3,
+                "dev" = dev.1_3,
+                "auc" = auc.1_3)
+
+out.glmnet_3 = list("ridge" = out.ridge_3,
+                 "elasticnet_0.5" = out.elasticnet_3,
+                 "lasso" = out.lasso_3)
+```
+
+```{r}
+saveRDS(out.glmnet_3, file = "data/out_models/results_glmnet_3folds.rds")
+```
+
+# 2. Results Presentation
+
+```{r}
+print.coef = function(cv.glm, coef.num = T) {
+  coef.cv.glm = coef(cv.glm, s="lambda.min") 
+  out = coef.cv.glm[coef.cv.glm[,1] != 0,]
+  if (!coef.num) {
+    out = names(out)
+  }
+  out
+}
+```
+
+## A. 10 folds
+
+### Ridge
+
+```{r}
+plot(mse.0_10)
+title("10-fold CV, alpha = 0", line = 2.5)
+plot(dev.0_10)
+title("10-fold CV, alpha = 0", line = 2.5)
+plot(auc.0_10) # Actually Deviance
+title("10-fold CV, alpha = 0", line = 2.5)
+```
+
+### Elastic Net (Alpha =  0.5)
+
+```{r}
+plot(mse.0.5_10)
+title("10-fold CV, alpha = 0.5", line = 2.5)
+plot(dev.0.5_10)
+title("10-fold CV, alpha = 0.5", line = 2.5)
+plot(auc.0.5_10) # Actually Deviance
+title("10-fold CV, alpha = 0.5", line = 2.5)
+
+print.coef(mse.0.5_10)
+print.coef(dev.0.5_10)
+print.coef(auc.0.5_10)
+```
+
+### Lasso
+
+```{r}
+plot(mse.1_10)
+title("10-fold CV, alpha = 1", line = 2.5)
+plot(dev.1_10)
+title("10-fold CV, alpha = 1", line = 2.5)
+plot(auc.1_10) # Actually Deviance
+title("10-fold CV, alpha = 1", line = 2.5)
+
+print.coef(mse.1_10)
+print.coef(dev.1_10)
+print.coef(auc.1_10)
+```
+
+## B. 5 folds
+
+### Ridge
+
+```{r}
+plot(mse.0_5)
+title("5-fold CV, alpha = 0", line = 2.5)
+plot(dev.0_5)
+title("5-fold CV, alpha = 0", line = 2.5)
+plot(auc.0_5) # Actually Deviance
+title("5-fold CV, alpha = 0", line = 2.5)
+```
+
+### Elastic Net (Alpha =  0.5)
+
+```{r}
+plot(mse.0.5_5)
+title("5-fold CV, alpha = 0.5", line = 2.5)
+plot(dev.0.5_5)
+title("5-fold CV, alpha = 0.5", line = 2.5)
+plot(auc.0.5_5)
+title("5-fold CV, alpha = 0.5", line = 2.5)
+
+print.coef(mse.0.5_5)
+print.coef(dev.0.5_5)
+print.coef(auc.0.5_5)
+```
+
+### Lasso
+
+```{r}
+plot(mse.1_5)
+title("5-fold CV, alpha = 1", line = 2.5)
+plot(dev.1_5)
+title("5-fold CV, alpha = 1", line = 2.5)
+plot(auc.1_5) # Actually Deviance
+title("5-fold CV, alpha = 1", line = 2.5)
+
+print.coef(mse.1_5)
+print.coef(dev.1_5)
+print.coef(auc.1_5)
+```
+
+## C. 3 folds
+
+### Ridge
+
+```{r}
+plot(mse.0_3)
+title("3-fold CV, alpha = 0", line = 2.5)
+plot(dev.0_3)
+title("3-fold CV, alpha = 0", line = 2.5)
+plot(auc.0_3)
+title("3-fold CV, alpha = 0", line = 2.5)
+```
+
+### Elastic Net (Alpha =  0.5)
+
+```{r}
+plot(mse.0.5_3)
+title("3-fold CV, alpha = 0.5", line = 2.5)
+plot(dev.0.5_3)
+title("3-fold CV, alpha = 0.5", line = 2.5)
+plot(auc.0.5_3)
+title("3-fold CV, alpha = 0.5", line = 2.5)
+
+print.coef(mse.0.5_3)
+print.coef(dev.0.5_3)
+print.coef(auc.0.5_3)
+```
+
+### Lasso
+
+```{r}
+plot(mse.1_3)
+title("3-fold CV, alpha = 1", line = 2.5)
+plot(dev.1_3)
+title("3-fold CV, alpha = 1", line = 2.5)
+plot(auc.1_3)
+title("3-fold CV, alpha = 1", line = 2.5)
+
+print.coef(mse.1_3)
+print.coef(dev.1_3)
+print.coef(auc.1_3)
+```
+
+# 3. Further Alpha attempts
+
+We will explore alphas < 0.5 for 10 and 5 folds Glmnet, as they return 0 selected features for Elastic net (alpha = 0.5) and Lasso.
+
+It was found that alpha = 0.2 returns enough selected features for 10 and 5 folds Glmnet.
+
+## A. 10 folds
+
+```{r}
+set.seed(42)
+plot(vs.cv.glm(0.1, measure = "mse"))
+title("10-fold CV, alpha = 0.1", line = 2.5)
+plot(vs.cv.glm(0.2, measure = "mse"))
+title("10-fold CV, alpha = 0.2", line = 2.5)
+plot(vs.cv.glm(0.3, measure = "mse"))
+title("10-fold CV, alpha = 0.3", line = 2.5)
+plot(vs.cv.glm(0.4, measure = "mse"))
+title("10-fold CV, alpha = 0.4", line = 2.5)
+```
+```{r}
+set.seed(42)
+plot(vs.cv.glm(0.1, measure = "deviance"))
+title("10-fold CV, alpha = 0.1", line = 2.5)
+plot(vs.cv.glm(0.2, measure = "deviance"))
+title("10-fold CV, alpha = 0.2", line = 2.5)
+plot(vs.cv.glm(0.3, measure = "deviance"))
+title("10-fold CV, alpha = 0.3", line = 2.5)
+plot(vs.cv.glm(0.4, measure = "deviance"))
+title("10-fold CV, alpha = 0.4", line = 2.5)
+```
+
+
+```{r}
+set.seed(42)
+mse.0.2_10 = vs.cv.glm(0.2, measure = "mse")
+dev.0.2_10 = vs.cv.glm(0.2, measure = "deviance")
+auc.0.2_10 = vs.cv.glm(0.2, measure = "auc")
+
+plot(mse.0.2_10)
+title("10-fold CV, alpha = 0.2", line = 2.5)
+plot(dev.0.2_10)
+title("10-fold CV, alpha = 0.2", line = 2.5)
+plot(auc.0.2_10)
+title("10-fold CV, alpha = 0.2", line = 2.5)
+print.coef(mse.0.2_10)
+print.coef(dev.0.2_10)
+print.coef(auc.0.2_10)
+```
+
+```{r}
+out.glmnet.0.2_10 = list("mse" = mse.0.2_10,
+                      "dev" = dev.0.2_10)
+
+saveRDS(out.glmnet.0.2_10, file = "data/out_models/results_glmnet_0.2_10folds.rds")
+```
+
+## B. 5 folds
+
+```{r}
+set.seed(42)
+plot(vs.cv.glm(0.1, measure = "mse", fold = 5))
+title("5-fold CV, alpha = 0.1", line = 2.5)
+plot(vs.cv.glm(0.2, measure = "mse", fold = 5))
+title("5-fold CV, alpha = 0.2", line = 2.5)
+plot(vs.cv.glm(0.3, measure = "mse", fold = 5))
+title("5-fold CV, alpha = 0.3", line = 2.5)
+plot(vs.cv.glm(0.4, measure = "mse", fold = 5))
+title("5-fold CV, alpha = 0.4", line = 2.5)
+```
+```{r}
+set.seed(42)
+plot(vs.cv.glm(0.1, measure = "deviance", fold = 5))
+title("5-fold CV, alpha = 0.1", line = 2.5)
+plot(vs.cv.glm(0.2, measure = "deviance", fold = 5))
+title("5-fold CV, alpha = 0.2", line = 2.5)
+plot(vs.cv.glm(0.3, measure = "deviance", fold = 5))
+title("5-fold CV, alpha = 0.3", line = 2.5)
+plot(vs.cv.glm(0.4, measure = "deviance", fold = 5))
+title("5-fold CV, alpha = 0.4", line = 2.5)
+```
+
+```{r}
+set.seed(42)
+mse.0.2_5 = vs.cv.glm(0.2, measure = "mse", fold = 5)
+dev.0.2_5 = vs.cv.glm(0.2, measure = "deviance", fold = 5)
+auc.0.2_5 = vs.cv.glm(0.2, measure = "auc", fold = 5)
+
+plot(mse.0.2_5)
+title("5-fold CV, alpha = 0.2", line = 2.5)
+plot(dev.0.2_5)
+title("5-fold CV, alpha = 0.2", line = 2.5)
+plot(auc.0.2_5)
+title("5-fold CV, alpha = 0.2", line = 2.5)
+print.coef(mse.0.2_5)
+print.coef(dev.0.2_5)
+print.coef(auc.0.2_5)
+```
+
+
+```{r}
+out.glmnet.0.2_5 = list("mse" = mse.0.2_5,
+                      "dev" = dev.0.2_5)
+
+saveRDS(out.glmnet.0.2_5, file = "data/out_models/results_glmnet_0.2_5folds.rds")
+```
+
+Save all coefficients as a separate RDS file for easy access:
+
+```{r}
+out.coef.0.2_5 = list("mse" = print.coef(mse.0.2_5),
+                      "dev" = print.coef(dev.0.2_5))
+
+out.coef.0.5_3 = list("mse" = print.coef(mse.0.5_3),
+                      "dev" = print.coef(dev.0.5_3),
+                      "auc" = print.coef(auc.0.5_3))
+
+out.coef.1_3 = list("mse" = print.coef(mse.1_3),
+                    "dev" = print.coef(dev.1_3),
+                    "auc" = print.coef(auc.1_3))
+
+out.coef.0.5_5 = list("mse" = print.coef(mse.0.5_5),
+                      "dev" = print.coef(dev.0.5_5))
+
+out.coef.1_5 = list("mse" = print.coef(mse.1_5),
+                    "dev" = print.coef(dev.1_5))
+
+out.coef.0.2_10 = list("mse" = print.coef(mse.0.2_10),
+                      "dev" = print.coef(dev.0.2_10))
+
+out.coef.0.5_10 = list("mse" = print.coef(mse.0.5_10),
+                      "dev" = print.coef(dev.0.5_10))
+
+out.coef.1_10 = list("mse" = print.coef(mse.1_10),
+                    "dev" = print.coef(dev.1_10))
+
+out.coef.3 = list("elasticnet_0.5" = out.coef.0.5_3,
+                  "lasso" = out.coef.1_3)
+
+out.coef.5 = list("elasticnet_0.2" = out.coef.0.2_5,
+                  "elasticnet_0.5" = out.coef.0.5_5,
+                  "lasso" = out.coef.1_5)
+
+out.coef.10 = list("elasticnet_0.2" = out.coef.0.2_10,
+                   "elasticnet_0.5" = out.coef.0.5_10,
+                  "lasso" = out.coef.1_10)
+
+out.coef = list("fold3" = out.coef.3,
+                "fold5" = out.coef.5,
+                "fold10" = out.coef.10)
+
+saveRDS(out.coef, file = "data/sel_features/results_glmnet_coef.rds")
+```
+

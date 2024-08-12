@@ -1,0 +1,450 @@
+---
+title: "Pathway Analysis for MOFA (thresL criterion)"
+author: "John Zhuang"
+date: "2024-08-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(multiMiR)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(stringr)
+library(ggplot2)
+```
+
+# 0. Loading of Results
+
+## A. List of all Gene names in the dataset
+
+```{r}
+gene.names = readRDS("data/derived/unique_gene_names.rds")
+```
+
+## B. Selected Features
+
+```{r}
+results.mofa = readRDS("data/sel_features/results_mofa_extracted_by_bic.rds")
+sel.features = results.mofa
+sel.features
+```
+
+# 1. Convert microRNA to genes
+
+Also remove the ending ".R2Gn" and ".RPPA" from gene names.
+
+
+```{r}
+split.by.omic = function(variable.list) {
+  out.mRSG = variable.list[startsWith(variable.list, "hsa")]
+  out.R2Gn = variable.list[endsWith(variable.list, ".R2Gn")]
+  out.RPPA = variable.list[endsWith(variable.list, ".RPPA")]
+  out = list("miRNASeqGene" = out.mRSG,
+             "RNASeq2GeneNorm" = out.R2Gn,
+             "RPPAArray" = out.RPPA)
+  out
+}
+```
+
+```{r}
+multiomics.to.GENES = function(sel.features, full.search = F, table = "validated", drop.miRNA = F) {
+  multiomics.list = split.by.omic(sel.features)
+  # Convert miRNASeqGene to target GENE names
+  # Skipped and returns an empty list instead of the list of select features,
+  # or if microRNA features are explicitly dropped (drop.miRNA = T).
+  # (Usually done when the features has only a few miRNA and unable to target any genes)
+  if (length(multiomics.list[[1]]) > 0 & !drop.miRNA) {
+    if (!full.search) { # Search only among the 198 genes in ACC, recommended
+    targets= get_multimir(mirna = multiomics.list[[1]], 
+                          target = gene.names,
+                          table = table,
+                          summary = T)
+    mRSG.target.genes = unique(targets@data$target_symbol)
+    } else { # Search the full dataset, not recommended. 
+             # Use only if ACC gene search returns nothing or fails.
+             # Genes not in the ACC genes need to be manually removed.
+    targets= get_multimir(mirna = multiomics.list[[1]], 
+                          table = table,
+                          summary = T)  
+    mRSG.target.genes = unique(targets@data$target_symbol)
+    }
+    
+  } else {
+    mRSG.target.genes = list()
+  }
+  #Remove suffix for Pathway Analysis Compatibility
+  R2Gn.genes = str_remove(multiomics.list[[2]], ".R2Gn")
+  
+  RPPA.genes = str_remove(multiomics.list[[3]], ".RPPA")
+  
+  #Join all cleaned-up genes are remove duplicates.
+  out1 = c(mRSG.target.genes, R2Gn.genes, RPPA.genes)
+  out = as.character(unique(out1))
+  out
+}
+```
+
+```{r}
+geneNames <- list("Factor1of1"= multiomics.to.GENES(names(sel.features$`1f`$Factor1)),
+                  
+                  "Factor1of2"= multiomics.to.GENES(names(sel.features$`2f`$Factor1)),
+                  "Factor2of2"= multiomics.to.GENES(names(sel.features$`2f`$Factor2)),
+                  
+                  "Factor1of3"= multiomics.to.GENES(names(sel.features$`3f`$Factor1)),
+                  "Factor2of3"= multiomics.to.GENES(names(sel.features$`3f`$Factor2)),
+                  "Factor3of3"= multiomics.to.GENES(names(sel.features$`3f`$Factor3)), # Empty
+                  
+                  "Factor1of5"= multiomics.to.GENES(names(sel.features$`5f`$Factor1)),
+                  "Factor2of5"= multiomics.to.GENES(names(sel.features$`5f`$Factor2)),
+                  "Factor3of5"= multiomics.to.GENES(names(sel.features$`5f`$Factor3)),
+                  "Factor4of5"= multiomics.to.GENES(names(sel.features$`5f`$Factor4)),
+                  "Factor5of5"= multiomics.to.GENES(names(sel.features$`5f`$Factor5)),
+                  
+                  "Factor1of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor1)),
+                  "Factor2of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor2)),
+                  "Factor3of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor3)),
+                  "Factor4of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor4)),
+                  "Factor5of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor5)),
+                  "Factor6of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor6)),
+                  "Factor7of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor7)),
+                  "Factor8of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor8)), # Empty
+                  "Factor9of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor9)), # Empty
+                  "Factor10of10"= multiomics.to.GENES(names(sel.features$`10f`$Factor10)) # Empty
+                  )
+```
+```{r}
+geneNames
+```
+
+
+```{r}
+saveRDS(geneNames, file = "data/sel_features/gene_converted/genes_mofa_extracted_by_bic.rds")
+```
+
+
+
+# 2. Pathway Analysis
+
+## A. GO Classification
+
+```{r}
+ggo_MF <- list()#functional profile of a geneset for Molecular Function
+ggo_BP <- list()#functional profile of a geneset for Biological Process
+ggo_CC <- list()#functional profile of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+
+  ggo_MF[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="MF",
+    keyType="SYMBOL",
+    readable=TRUE)
+  
+  ggo_BP[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="BP",
+    keyType="SYMBOL",
+    readable=TRUE)
+
+  ggo_CC[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="CC",
+    keyType="SYMBOL",
+    readable=TRUE)    
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)) {
+  print(head(ggo_MF[[z]]))
+  print(head(ggo_BP[[z]]))
+  print(head(ggo_CC[[z]]))
+}
+```
+```{r}
+barplot(ggo_MF[[1]], title = "groupGO, Molecular Function, Factor 1 of 1")
+barplot(ggo_MF[[2]], title = "groupGO, Molecular Function, Factor 1 of 2")
+barplot(ggo_MF[[3]], title = "groupGO, Molecular Function, Factor 2 of 2")
+barplot(ggo_MF[[4]], title = "groupGO, Molecular Function, Factor 1 of 3")
+barplot(ggo_MF[[5]], title = "groupGO, Molecular Function, Factor 2 of 3")
+barplot(ggo_MF[[6]], title = "groupGO, Molecular Function, Factor 3 of 3")
+barplot(ggo_MF[[7]], title = "groupGO, Molecular Function, Factor 1 of 5")
+barplot(ggo_MF[[8]], title = "groupGO, Molecular Function, Factor 2 of 5")
+barplot(ggo_MF[[9]], title = "groupGO, Molecular Function, Factor 3 of 5")
+barplot(ggo_MF[[10]], title = "groupGO, Molecular Function, Factor 4 of 5")
+barplot(ggo_MF[[11]], title = "groupGO, Molecular Function, Factor 5 of 5")
+barplot(ggo_MF[[12]], title = "groupGO, Molecular Function, Factor 1 of 10")
+barplot(ggo_MF[[13]], title = "groupGO, Molecular Function, Factor 2 of 10")
+barplot(ggo_MF[[14]], title = "groupGO, Molecular Function, Factor 3 of 10")
+barplot(ggo_MF[[15]], title = "groupGO, Molecular Function, Factor 4 of 10")
+barplot(ggo_MF[[16]], title = "groupGO, Molecular Function, Factor 5 of 10")
+barplot(ggo_MF[[17]], title = "groupGO, Molecular Function, Factor 6 of 10")
+barplot(ggo_MF[[18]], title = "groupGO, Molecular Function, Factor 7 of 10")
+barplot(ggo_MF[[19]], title = "groupGO, Molecular Function, Factor 8 of 10")
+barplot(ggo_MF[[20]], title = "groupGO, Molecular Function, Factor 9 of 10")
+barplot(ggo_MF[[21]], title = "groupGO, Molecular Function, Factor 10 of 10")
+
+barplot(ggo_BP[[1]], title = "groupGO, Biological Process, Factor 1 of 1")
+barplot(ggo_BP[[2]], title = "groupGO, Biological Process, Factor 1 of 2")
+barplot(ggo_BP[[3]], title = "groupGO, Biological Process, Factor 2 of 2")
+barplot(ggo_BP[[4]], title = "groupGO, Biological Process, Factor 1 of 3")
+barplot(ggo_BP[[5]], title = "groupGO, Biological Process, Factor 2 of 3")
+barplot(ggo_BP[[6]], title = "groupGO, Biological Process, Factor 3 of 3")
+barplot(ggo_BP[[7]], title = "groupGO, Biological Process, Factor 1 of 5")
+barplot(ggo_BP[[8]], title = "groupGO, Biological Process, Factor 2 of 5")
+barplot(ggo_BP[[9]], title = "groupGO, Biological Process, Factor 3 of 5")
+barplot(ggo_BP[[10]], title = "groupGO, Biological Process, Factor 4 of 5")
+barplot(ggo_BP[[11]], title = "groupGO, Biological Process, Factor 5 of 5")
+barplot(ggo_BP[[12]], title = "groupGO, Biological Process, Factor 1 of 10")
+barplot(ggo_BP[[13]], title = "groupGO, Biological Process, Factor 2 of 10")
+barplot(ggo_BP[[14]], title = "groupGO, Biological Process, Factor 3 of 10")
+barplot(ggo_BP[[15]], title = "groupGO, Biological Process, Factor 4 of 10")
+barplot(ggo_BP[[16]], title = "groupGO, Biological Process, Factor 5 of 10")
+barplot(ggo_BP[[17]], title = "groupGO, Biological Process, Factor 6 of 10")
+barplot(ggo_BP[[18]], title = "groupGO, Biological Process, Factor 7 of 10")
+barplot(ggo_BP[[19]], title = "groupGO, Biological Process, Factor 8 of 10")
+barplot(ggo_BP[[20]], title = "groupGO, Biological Process, Factor 9 of 10")
+barplot(ggo_BP[[21]], title = "groupGO, Biological Process, Factor 10 of 10")
+
+barplot(ggo_CC[[1]], title = "groupGO, Cellular Component, Factor 1 of 1")
+barplot(ggo_CC[[2]], title = "groupGO, Cellular Component, Factor 1 of 2")
+barplot(ggo_CC[[3]], title = "groupGO, Cellular Component, Factor 2 of 2")
+barplot(ggo_CC[[4]], title = "groupGO, Cellular Component, Factor 1 of 3")
+barplot(ggo_CC[[5]], title = "groupGO, Cellular Component, Factor 2 of 3")
+barplot(ggo_CC[[6]], title = "groupGO, Cellular Component, Factor 3 of 3")
+barplot(ggo_CC[[7]], title = "groupGO, Cellular Component, Factor 1 of 5")
+barplot(ggo_CC[[8]], title = "groupGO, Cellular Component, Factor 2 of 5")
+barplot(ggo_CC[[9]], title = "groupGO, Cellular Component, Factor 3 of 5")
+barplot(ggo_CC[[10]], title = "groupGO, Cellular Component, Factor 4 of 5")
+barplot(ggo_CC[[11]], title = "groupGO, Cellular Component, Factor 5 of 5")
+barplot(ggo_CC[[12]], title = "groupGO, Cellular Component, Factor 1 of 10")
+barplot(ggo_CC[[13]], title = "groupGO, Cellular Component, Factor 2 of 10")
+barplot(ggo_CC[[14]], title = "groupGO, Cellular Component, Factor 3 of 10")
+barplot(ggo_CC[[15]], title = "groupGO, Cellular Component, Factor 4 of 10")
+barplot(ggo_CC[[16]], title = "groupGO, Cellular Component, Factor 5 of 10")
+barplot(ggo_CC[[17]], title = "groupGO, Cellular Component, Factor 6 of 10")
+barplot(ggo_CC[[18]], title = "groupGO, Cellular Component, Factor 7 of 10")
+barplot(ggo_CC[[19]], title = "groupGO, Cellular Component, Factor 8 of 10")
+barplot(ggo_CC[[20]], title = "groupGO, Cellular Component, Factor 9 of 10")
+barplot(ggo_CC[[21]], title = "groupGO, Cellular Component, Factor 10 of 10")
+```
+
+## B. GO Over-Representation
+
+```{r}
+ego_MF <- list()#GO enrichment of a geneset for Molecular Function
+ego_BP <- list()#GO enrichment of a geneset for Biological Process
+ego_CC <- list()#GO enrichment of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+  ego_MF[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "MF",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_BP[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "BP",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_CC[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "CC",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+}
+```
+
+```{r}
+for(z in 1:18){ #19-21 don't work
+  #print(z)
+  print(head(ego_MF[[z]]))
+  print(head(ego_BP[[z]]))
+  print(head(ego_CC[[z]]))
+}
+```
+
+
+```{r}
+barplot(ego_MF[[1]], title = "enrichGO, Molecular Function, Factor 1 of 1")
+barplot(ego_MF[[2]], title = "enrichGO, Molecular Function, Factor 1 of 2")
+barplot(ego_MF[[3]], title = "enrichGO, Molecular Function, Factor 2 of 2")
+barplot(ego_MF[[4]], title = "enrichGO, Molecular Function, Factor 1 of 3")
+barplot(ego_MF[[5]], title = "enrichGO, Molecular Function, Factor 2 of 3")
+#barplot(ego_MF[[6]], title = "enrichGO, Molecular Function, Factor 3 of 3")
+barplot(ego_MF[[7]], title = "enrichGO, Molecular Function, Factor 1 of 5")
+barplot(ego_MF[[8]], title = "enrichGO, Molecular Function, Factor 2 of 5")
+barplot(ego_MF[[9]], title = "enrichGO, Molecular Function, Factor 3 of 5")
+#barplot(ego_MF[[10]], title = "enrichGO, Molecular Function, Factor 4 of 5")
+barplot(ego_MF[[11]], title = "enrichGO, Molecular Function, Factor 5 of 5")
+barplot(ego_MF[[12]], title = "enrichGO, Molecular Function, Factor 1 of 10")
+barplot(ego_MF[[13]], title = "enrichGO, Molecular Function, Factor 2 of 10")
+barplot(ego_MF[[14]], title = "enrichGO, Molecular Function, Factor 3 of 10")
+barplot(ego_MF[[15]], title = "enrichGO, Molecular Function, Factor 4 of 10")
+barplot(ego_MF[[16]], title = "enrichGO, Molecular Function, Factor 5 of 10")
+barplot(ego_MF[[17]], title = "enrichGO, Molecular Function, Factor 6 of 10")
+barplot(ego_MF[[18]], title = "enrichGO, Molecular Function, Factor 7 of 10")
+#barplot(ego_MF[[19]], title = "enrichGO, Molecular Function, Factor 8 of 10")
+#barplot(ego_MF[[20]], title = "enrichGO, Molecular Function, Factor 9 of 10")
+#barplot(ego_MF[[21]], title = "enrichGO, Molecular Function, Factor 10 of 10")
+
+barplot(ego_BP[[1]], title = "enrichGO, Biological Process, Factor 1 of 1")
+barplot(ego_BP[[2]], title = "enrichGO, Biological Process, Factor 1 of 2")
+barplot(ego_BP[[3]], title = "enrichGO, Biological Process, Factor 2 of 2")
+barplot(ego_BP[[4]], title = "enrichGO, Biological Process, Factor 1 of 3")
+barplot(ego_BP[[5]], title = "enrichGO, Biological Process, Factor 2 of 3")
+#barplot(ego_BP[[6]], title = "enrichGO, Biological Process, Factor 3 of 3")
+barplot(ego_BP[[7]], title = "enrichGO, Biological Process, Factor 1 of 5")
+barplot(ego_BP[[8]], title = "enrichGO, Biological Process, Factor 2 of 5")
+barplot(ego_BP[[9]], title = "enrichGO, Biological Process, Factor 3 of 5")
+barplot(ego_BP[[10]], title = "enrichGO, Biological Process, Factor 4 of 5")
+barplot(ego_BP[[11]], title = "enrichGO, Biological Process, Factor 5 of 5")
+barplot(ego_BP[[12]], title = "enrichGO, Biological Process, Factor 1 of 10")
+barplot(ego_BP[[13]], title = "enrichGO, Biological Process, Factor 2 of 10")
+barplot(ego_BP[[14]], title = "enrichGO, Biological Process, Factor 3 of 10")
+barplot(ego_BP[[15]], title = "enrichGO, Biological Process, Factor 4 of 10")
+barplot(ego_BP[[16]], title = "enrichGO, Biological Process, Factor 5 of 10")
+barplot(ego_BP[[17]], title = "enrichGO, Biological Process, Factor 6 of 10")
+barplot(ego_BP[[18]], title = "enrichGO, Biological Process, Factor 7 of 10")
+#barplot(ego_BP[[19]], title = "enrichGO, Biological Process, Factor 8 of 10")
+#barplot(ego_BP[[20]], title = "enrichGO, Biological Process, Factor 9 of 10")
+#barplot(ego_BP[[21]], title = "enrichGO, Biological Process, Factor 10 of 10")
+
+barplot(ego_CC[[1]], title = "enrichGO, Cellular Component, Factor 1 of 1")
+barplot(ego_CC[[2]], title = "enrichGO, Cellular Component, Factor 1 of 2")
+barplot(ego_CC[[3]], title = "enrichGO, Cellular Component, Factor 2 of 2")
+barplot(ego_CC[[4]], title = "enrichGO, Cellular Component, Factor 1 of 3")
+barplot(ego_CC[[5]], title = "enrichGO, Cellular Component, Factor 2 of 3")
+#barplot(ego_CC[[6]], title = "enrichGO, Cellular Component, Factor 3 of 3")
+barplot(ego_CC[[7]], title = "enrichGO, Cellular Component, Factor 1 of 5")
+barplot(ego_CC[[8]], title = "enrichGO, Cellular Component, Factor 2 of 5")
+barplot(ego_CC[[9]], title = "enrichGO, Cellular Component, Factor 3 of 5")
+barplot(ego_CC[[10]], title = "enrichGO, Cellular Component, Factor 4 of 5")
+barplot(ego_CC[[11]], title = "enrichGO, Cellular Component, Factor 5 of 5")
+barplot(ego_CC[[12]], title = "enrichGO, Cellular Component, Factor 1 of 10")
+barplot(ego_CC[[13]], title = "enrichGO, Cellular Component, Factor 2 of 10")
+barplot(ego_CC[[14]], title = "enrichGO, Cellular Component, Factor 3 of 10")
+barplot(ego_CC[[15]], title = "enrichGO, Cellular Component, Factor 4 of 10")
+barplot(ego_CC[[16]], title = "enrichGO, Cellular Component, Factor 5 of 10")
+barplot(ego_CC[[17]], title = "enrichGO, Cellular Component, Factor 6 of 10")
+barplot(ego_CC[[18]], title = "enrichGO, Cellular Component, Factor 7 of 10")
+#barplot(ego_CC[[19]], title = "enrichGO, Cellular Component, Factor 8 of 10")
+#barplot(ego_CC[[20]], title = "enrichGO, Cellular Component, Factor 9 of 10")
+#barplot(ego_CC[[21]], title = "enrichGO, Cellular Component, Factor 10 of 10")
+
+
+```
+
+### DAG plots for ego
+
+```{r fig.width=20, fig.height=10}
+goplot(ego_MF[[1]]) + labs(title = "enrichGO, Molecular Function, Factor 1 of 1")
+goplot(ego_MF[[2]]) + labs(title = "enrichGO, Molecular Function, Factor 1 of 2")
+goplot(ego_MF[[3]]) + labs(title = "enrichGO, Molecular Function, Factor 2 of 2")
+goplot(ego_MF[[4]]) + labs(title = "enrichGO, Molecular Function, Factor 1 of 3")
+goplot(ego_MF[[5]]) + labs(title = "enrichGO, Molecular Function, Factor 2 of 3")
+#goplot(ego_MF[[6]]) + labs(title = "enrichGO, Molecular Function, Factor 3 of 3")
+goplot(ego_MF[[7]]) + labs(title = "enrichGO, Molecular Function, Factor 1 of 5")
+goplot(ego_MF[[8]]) + labs(title = "enrichGO, Molecular Function, Factor 2 of 5")
+goplot(ego_MF[[9]]) + labs(title = "enrichGO, Molecular Function, Factor 3 of 5")
+#goplot(ego_MF[[10]]) + labs(title = "enrichGO, Molecular Function, Factor 4 of 5")
+goplot(ego_MF[[11]]) + labs(title = "enrichGO, Molecular Function, Factor 5 of 5")
+goplot(ego_MF[[12]]) + labs(title = "enrichGO, Molecular Function, Factor 1 of 10")
+goplot(ego_MF[[13]]) + labs(title = "enrichGO, Molecular Function, Factor 2 of 10")
+goplot(ego_MF[[14]]) + labs(title = "enrichGO, Molecular Function, Factor 3 of 10")
+goplot(ego_MF[[15]]) + labs(title = "enrichGO, Molecular Function, Factor 4 of 10")
+goplot(ego_MF[[16]]) + labs(title = "enrichGO, Molecular Function, Factor 5 of 10")
+goplot(ego_MF[[17]]) + labs(title = "enrichGO, Molecular Function, Factor 6 of 10")
+goplot(ego_MF[[18]]) + labs(title = "enrichGO, Molecular Function, Factor 7 of 10")
+#goplot(ego_MF[[19]]) + labs(title = "enrichGO, Molecular Function, Factor 8 of 10")
+#goplot(ego_MF[[20]]) + labs(title = "enrichGO, Molecular Function, Factor 9 of 10")
+#goplot(ego_MF[[21]]) + labs(title = "enrichGO, Molecular Function, Factor 10 of 10")
+
+goplot(ego_BP[[1]]) + labs(title = "enrichGO, Biological Process, Factor 1 of 1")
+goplot(ego_BP[[2]]) + labs(title = "enrichGO, Biological Process, Factor 1 of 2")
+goplot(ego_BP[[3]]) + labs(title = "enrichGO, Biological Process, Factor 2 of 2")
+goplot(ego_BP[[4]]) + labs(title = "enrichGO, Biological Process, Factor 1 of 3")
+goplot(ego_BP[[5]]) + labs(title = "enrichGO, Biological Process, Factor 2 of 3")
+#goplot(ego_BP[[6]]) + labs(title = "enrichGO, Biological Process, Factor 3 of 3")
+goplot(ego_BP[[7]]) + labs(title = "enrichGO, Biological Process, Factor 1 of 5")
+goplot(ego_BP[[8]]) + labs(title = "enrichGO, Biological Process, Factor 2 of 5")
+goplot(ego_BP[[9]]) + labs(title = "enrichGO, Biological Process, Factor 3 of 5")
+goplot(ego_BP[[10]]) + labs(title = "enrichGO, Biological Process, Factor 4 of 5")
+goplot(ego_BP[[11]]) + labs(title = "enrichGO, Biological Process, Factor 5 of 5")
+goplot(ego_BP[[12]]) + labs(title = "enrichGO, Biological Process, Factor 1 of 10")
+goplot(ego_BP[[13]]) + labs(title = "enrichGO, Biological Process, Factor 2 of 10")
+goplot(ego_BP[[14]]) + labs(title = "enrichGO, Biological Process, Factor 3 of 10")
+goplot(ego_BP[[15]]) + labs(title = "enrichGO, Biological Process, Factor 4 of 10")
+goplot(ego_BP[[16]]) + labs(title = "enrichGO, Biological Process, Factor 5 of 10")
+goplot(ego_BP[[17]]) + labs(title = "enrichGO, Biological Process, Factor 6 of 10")
+goplot(ego_BP[[18]]) + labs(title = "enrichGO, Biological Process, Factor 7 of 10")
+#goplot(ego_BP[[19]]) + labs(title = "enrichGO, Biological Process, Factor 8 of 10")
+#goplot(ego_BP[[20]]) + labs(title = "enrichGO, Biological Process, Factor 9 of 10")
+#goplot(ego_BP[[21]]) + labs(title = "enrichGO, Biological Process, Factor 10 of 10")
+
+goplot(ego_CC[[1]]) + labs(title = "enrichGO, Cellular Component, Factor 1 of 1")
+goplot(ego_CC[[2]]) + labs(title = "enrichGO, Cellular Component, Factor 1 of 2")
+goplot(ego_CC[[3]]) + labs(title = "enrichGO, Cellular Component, Factor 2 of 2")
+goplot(ego_CC[[4]]) + labs(title = "enrichGO, Cellular Component, Factor 1 of 3")
+goplot(ego_CC[[5]]) + labs(title = "enrichGO, Cellular Component, Factor 2 of 3")
+#goplot(ego_CC[[6]]) + labs(title = "enrichGO, Cellular Component, Factor 3 of 3")
+goplot(ego_CC[[7]]) + labs(title = "enrichGO, Cellular Component, Factor 1 of 5")
+goplot(ego_CC[[8]]) + labs(title = "enrichGO, Cellular Component, Factor 2 of 5")
+goplot(ego_CC[[9]]) + labs(title = "enrichGO, Cellular Component, Factor 3 of 5")
+#goplot(ego_CC[[10]]) + labs(title = "enrichGO, Cellular Component, Factor 4 of 5")
+goplot(ego_CC[[11]]) + labs(title = "enrichGO, Cellular Component, Factor 5 of 5")
+goplot(ego_CC[[12]]) + labs(title = "enrichGO, Cellular Component, Factor 1 of 10")
+goplot(ego_CC[[13]]) + labs(title = "enrichGO, Cellular Component, Factor 2 of 10")
+goplot(ego_CC[[14]]) + labs(title = "enrichGO, Cellular Component, Factor 3 of 10")
+goplot(ego_CC[[15]]) + labs(title = "enrichGO, Cellular Component, Factor 4 of 10")
+goplot(ego_CC[[16]]) + labs(title = "enrichGO, Cellular Component, Factor 5 of 10")
+goplot(ego_CC[[17]]) + labs(title = "enrichGO, Cellular Component, Factor 6 of 10")
+goplot(ego_CC[[18]]) + labs(title = "enrichGO, Cellular Component, Factor 7 of 10")
+#goplot(ego_CC[[19]]) + labs(title = "enrichGO, Cellular Component, Factor 8 of 10")
+#goplot(ego_CC[[20]]) + labs(title = "enrichGO, Cellular Component, Factor 9 of 10")
+#goplot(ego_CC[[21]]) + labs(title = "enrichGO, Cellular Component, Factor 10 of 10")
+
+
+```
+
+
+# 3. Export Pathway Analysis result to data
+
+```{r}
+pathway = list("ggo_MF" = ggo_MF,
+               "ggo_BP" = ggo_BP,
+               "ggo_CC" = ggo_CC,
+               "ego_MF" = ego_MF,
+               "ego_BP" = ego_BP,
+               "ego_CC" = ego_CC)
+
+saveRDS(pathway, file = "data/out_pathway/pathways_mofa_extracted_by_bic.rds")
+```
+

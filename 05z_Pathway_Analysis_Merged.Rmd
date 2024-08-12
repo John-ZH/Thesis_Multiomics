@@ -1,0 +1,318 @@
+---
+title: "Pathway Analysis for all methods genes merged"
+author: "John Zhuang"
+date: "2024-08-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ggplot2)
+```
+
+# 0. Loading of Results
+
+## A. Converted Genes of Selected Features
+
+For FABIA and MOFA, we are only retaining the genes from features selected in the 10-bicluster/factor form, because biclusters/factors can be similar across different number of biclusters.
+
+```{r}
+genes.glmnet = readRDS("data/sel_features/gene_converted/genes_glmnet.rds")
+genes.glmnet.cox.1se = readRDS("data/sel_features/gene_converted/genes_glmnet_cox_1se.rds")
+genes.squeezy = readRDS("data/sel_features/gene_converted/genes_squeezy.rds")
+genes.globaltest = readRDS("data/sel_features/gene_converted/genes_globaltest.rds")
+
+genes.fabia.bic = readRDS("data/sel_features/gene_converted/genes_fabia_extracted_by_bic.rds")
+genes.mofa.bic = readRDS("data/sel_features/gene_converted/genes_mofa_extracted_by_bic.rds")
+genes.mfa = readRDS("data/sel_features/gene_converted/genes_mfa.rds")
+genes.fabia20.superbi = readRDS("data/sel_features/gene_converted/genes_superbiclust.fabia.rds")
+genes.fabiamofa.superbi = readRDS("data/sel_features/gene_converted/genes_superbiclust.fabia_mofa.rds")
+
+#For ggm, only those selected by the maximum possible FDRcut (named ".min" for the smallest 1e-n)). are selected.
+genes.ggm = readRDS("data/sel_features/gene_converted/genes_ggm.rds")[c(-3, -5, -7, -12, -13, -16, -17, -20, -21)]
+
+genes.all = readRDS("data/derived/unique_gene_names.rds")
+```
+
+# 1. Merge all gene lists of interest for the same method into a single list.
+
+
+```{r}
+merge.all.gene.list = function(genelist, print.genes = T, print.count = T){
+  out = c()
+  for (i in 1:length(genelist)) {
+    out = c(out, genelist[[i]])
+  }
+  out.u = unique(out)
+  if (print.genes) {
+    print(out.u)
+  }
+  if (print.count) {
+    print(paste(length(out.u), "unique genes selected."))
+  }
+  out.u
+}
+```
+
+```{r}
+geneNames = list("glmnet" = merge.all.gene.list(genes.glmnet),
+                 "glmnet.cox" = merge.all.gene.list(genes.glmnet.cox.1se),
+                 "squeezy" = merge.all.gene.list(genes.squeezy),
+                 "globaltest" = merge.all.gene.list(genes.globaltest),
+                 
+                 "fabia.10" = merge.all.gene.list(genes.fabia.bic),
+                 "mofa.10" = merge.all.gene.list(genes.mofa.bic),
+                 "mfa" = merge.all.gene.list(genes.mfa),
+                 "fabia.20.superbiclust" = merge.all.gene.list(genes.fabia20.superbi),
+                 "fabia.10_mofa.10.superbiclust" = merge.all.gene.list(genes.fabiamofa.superbi),
+                 
+                 "ggm" = merge.all.gene.list(genes.ggm),
+                 
+                 "all.ACC" = genes.all
+            )
+print(genes.all)
+print("199 unique genes in total.")
+```
+
+
+```{r}
+saveRDS(geneNames, file = "data/sel_features/gene_converted/genes_methods_merged.rds")
+```
+
+
+
+# 2. Pathway Analysis
+
+## A. GO Classification
+
+```{r}
+ggo_MF <- list()#functional profile of a geneset for Molecular Function
+ggo_BP <- list()#functional profile of a geneset for Biological Process
+ggo_CC <- list()#functional profile of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+
+  ggo_MF[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="MF",
+    keyType="SYMBOL",
+    readable=TRUE)
+  
+  ggo_BP[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="BP",
+    keyType="SYMBOL",
+    readable=TRUE)
+
+  ggo_CC[[z]] <- groupGO(gene=input,
+    OrgDb = org.Hs.eg.db,
+    ont="CC",
+    keyType="SYMBOL",
+    readable=TRUE)    
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)) {
+  print(head(ggo_MF[[z]]))
+  print(head(ggo_BP[[z]]))
+  print(head(ggo_CC[[z]]))
+}
+```
+```{r}
+barplot(ggo_MF[[1]], title = "groupGO, Molecular Function, \n All Selected Genes, Logistic Regression Glmnet")
+barplot(ggo_MF[[2]], title = "groupGO, Molecular Function, \n All Selected Genes, Cox Regression Glmnet")
+barplot(ggo_MF[[3]], title = "groupGO, Molecular Function, \n All Selected Genes, Squeezy")
+barplot(ggo_MF[[4]], title = "groupGO, Molecular Function, \n All Selected Genes, Globaltest")
+barplot(ggo_MF[[5]], title = "groupGO, Molecular Function, \n All Selected Genes, FABIA")
+barplot(ggo_MF[[6]], title = "groupGO, Molecular Function, \n All Selected Genes, MOFA")
+barplot(ggo_MF[[7]], title = "groupGO, Molecular Function, \n All Selected Genes, MFA")
+barplot(ggo_MF[[8]], title = "groupGO, Molecular Function, \n All Selected Genes, 20 FABIA Ensemble")
+barplot(ggo_MF[[9]], title = "groupGO, Molecular Function, \n All Selected Genes, FABIA & MOFA Ensemble")
+barplot(ggo_MF[[10]], title = "groupGO, Molecular Function, \n All Selected Genes, Gaussian Graphical Models")
+barplot(ggo_MF[[11]], title = "groupGO, Molecular Function, \n All Genes in ACC Dataset")
+
+barplot(ggo_BP[[1]], title = "groupGO, Biological Process, \n All Selected Genes, Logistic Regression Glmnet")
+barplot(ggo_BP[[2]], title = "groupGO, Biological Process, \n All Selected Genes, Cox Regression Glmnet")
+barplot(ggo_BP[[3]], title = "groupGO, Biological Process, \n All Selected Genes, Squeezy")
+barplot(ggo_BP[[4]], title = "groupGO, Biological Process, \n All Selected Genes, Globaltest")
+barplot(ggo_BP[[5]], title = "groupGO, Biological Process, \n All Selected Genes, FABIA")
+barplot(ggo_BP[[6]], title = "groupGO, Biological Process, \n All Selected Genes, MOFA")
+barplot(ggo_BP[[7]], title = "groupGO, Biological Process, \n All Selected Genes, MFA")
+barplot(ggo_BP[[8]], title = "groupGO, Biological Process, \n All Selected Genes, 20 FABIA Ensemble")
+barplot(ggo_BP[[9]], title = "groupGO, Biological Process, \n All Selected Genes, FABIA & MOFA Ensemble")
+barplot(ggo_BP[[10]], title = "groupGO, Biological Process, \n All Selected Genes, Gaussian Graphical Models")
+barplot(ggo_BP[[11]], title = "groupGO, Biological Process, \n All Genes in ACC Dataset")
+
+barplot(ggo_CC[[1]], title = "groupGO, Cellular Component, \n All Selected Genes, Logistic Regression Glmnet")
+barplot(ggo_CC[[2]], title = "groupGO, Cellular Component, \n All Selected Genes, Cox Regression Glmnet")
+barplot(ggo_CC[[3]], title = "groupGO, Cellular Component, \n All Selected Genes, Squeezy")
+barplot(ggo_CC[[4]], title = "groupGO, Cellular Component, \n All Selected Genes, Globaltest")
+barplot(ggo_CC[[5]], title = "groupGO, Cellular Component, \n All Selected Genes, FABIA")
+barplot(ggo_CC[[6]], title = "groupGO, Cellular Component, \n All Selected Genes, MOFA")
+barplot(ggo_CC[[7]], title = "groupGO, Cellular Component, \n All Selected Genes, MFA")
+barplot(ggo_CC[[8]], title = "groupGO, Cellular Component, \n All Selected Genes, 20 FABIA Ensemble")
+barplot(ggo_CC[[9]], title = "groupGO, Cellular Component, \n All Selected Genes, FABIA & MOFA Ensemble")
+barplot(ggo_CC[[10]], title = "groupGO, Cellular Component, \n All Selected Genes, Gaussian Graphical Models")
+barplot(ggo_CC[[11]], title = "groupGO, Cellular Component, \n All Genes in ACC Dataset")
+
+```
+
+## B. GO Over-Representation
+
+```{r}
+ego_MF <- list()#GO enrichment of a geneset for Molecular Function
+ego_BP <- list()#GO enrichment of a geneset for Biological Process
+ego_CC <- list()#GO enrichment of a geneset for Cellular Component
+
+
+for(z in 1:length(geneNames)){
+  print(z)
+  input <- geneNames[[z]]
+  ego_MF[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "MF",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_BP[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "BP",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+  
+  ego_CC[[z]] <- enrichGO(
+    gene          = input,
+    OrgDb         = org.Hs.eg.db,
+    ont           = "CC",
+    pAdjustMethod = "BH",
+    keyType="SYMBOL",
+    pvalueCutoff  = 0.05,
+    qvalueCutoff  = 0.05,
+    minGSSize     = 2,
+    readable      = TRUE)
+}
+```
+
+```{r}
+for(z in 1:length(geneNames)){
+  print(head(ego_MF[[z]]))
+  print(head(ego_BP[[z]]))
+  print(head(ego_CC[[z]]))
+}
+```
+
+
+```{r}
+barplot(ego_MF[[1]], title = "enrichGO, Molecular Function, \n All Selected Genes, Logistic Regression Glmnet")
+barplot(ego_MF[[2]], title = "enrichGO, Molecular Function, \n All Selected Genes, Cox Regression Glmnet")
+barplot(ego_MF[[3]], title = "enrichGO, Molecular Function, \n All Selected Genes, Squeezy")
+barplot(ego_MF[[4]], title = "enrichGO, Molecular Function, \n All Selected Genes, Globaltest")
+barplot(ego_MF[[5]], title = "enrichGO, Molecular Function, \n All Selected Genes, FABIA")
+barplot(ego_MF[[6]], title = "enrichGO, Molecular Function, \n All Selected Genes, MOFA")
+barplot(ego_MF[[7]], title = "enrichGO, Molecular Function, \n All Selected Genes, MFA")
+barplot(ego_MF[[8]], title = "enrichGO, Molecular Function, \n All Selected Genes, 20 FABIA Ensemble")
+barplot(ego_MF[[9]], title = "enrichGO, Molecular Function, \n All Selected Genes, FABIA & MOFA Ensemble")
+barplot(ego_MF[[10]], title = "enrichGO, Molecular Function, \n All Selected Genes, Gaussian Graphical Models")
+barplot(ego_MF[[11]], title = "enrichGO, Molecular Function, \n All Genes in ACC Dataset")
+
+barplot(ego_BP[[1]], title = "enrichGO, Biological Process, \n All Selected Genes, Logistic Regression Glmnet")
+barplot(ego_BP[[2]], title = "enrichGO, Biological Process, \n All Selected Genes, Cox Regression Glmnet")
+barplot(ego_BP[[3]], title = "enrichGO, Biological Process, \n All Selected Genes, Squeezy")
+barplot(ego_BP[[4]], title = "enrichGO, Biological Process, \n All Selected Genes, Globaltest")
+barplot(ego_BP[[5]], title = "enrichGO, Biological Process, \n All Selected Genes, FABIA")
+barplot(ego_BP[[6]], title = "enrichGO, Biological Process, \n All Selected Genes, MOFA")
+barplot(ego_BP[[7]], title = "enrichGO, Biological Process, \n All Selected Genes, MFA")
+barplot(ego_BP[[8]], title = "enrichGO, Biological Process, \n All Selected Genes, 20 FABIA Ensemble")
+barplot(ego_BP[[9]], title = "enrichGO, Biological Process, \n All Selected Genes, FABIA & MOFA Ensemble")
+barplot(ego_BP[[10]], title = "enrichGO, Biological Process, \n All Selected Genes, Gaussian Graphical Models")
+barplot(ego_BP[[11]], title = "enrichGO, Biological Process, \n All Genes in ACC Dataset")
+
+barplot(ego_CC[[1]], title = "enrichGO, Cellular Component, \n All Selected Genes, Logistic Regression Glmnet")
+barplot(ego_CC[[2]], title = "enrichGO, Cellular Component, \n All Selected Genes, Cox Regression Glmnet")
+barplot(ego_CC[[3]], title = "enrichGO, Cellular Component, \n All Selected Genes, Squeezy")
+barplot(ego_CC[[4]], title = "enrichGO, Cellular Component, \n All Selected Genes, Globaltest")
+barplot(ego_CC[[5]], title = "enrichGO, Cellular Component, \n All Selected Genes, FABIA")
+barplot(ego_CC[[6]], title = "enrichGO, Cellular Component, \n All Selected Genes, MOFA")
+barplot(ego_CC[[7]], title = "enrichGO, Cellular Component, \n All Selected Genes, MFA")
+barplot(ego_CC[[8]], title = "enrichGO, Cellular Component, \n All Selected Genes, 20 FABIA Ensemble")
+barplot(ego_CC[[9]], title = "enrichGO, Cellular Component, \n All Selected Genes, FABIA & MOFA Ensemble")
+barplot(ego_CC[[10]], title = "enrichGO, Cellular Component, \n All Selected Genes, Gaussian Graphical Models")
+barplot(ego_CC[[11]], title = "enrichGO, Cellular Component, \n All Genes in ACC Dataset")
+
+
+
+```
+
+### DAG plots for ego
+
+```{r fig.width=20, fig.height=10}
+goplot(ego_MF[[1]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, Logistic Regression Glmnet")
+goplot(ego_MF[[2]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, Cox Regression Glmnet")
+goplot(ego_MF[[3]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, Squeezy")
+goplot(ego_MF[[4]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, Globaltest")
+goplot(ego_MF[[5]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, FABIA")
+goplot(ego_MF[[6]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, MOFA")
+goplot(ego_MF[[7]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, MFA")
+goplot(ego_MF[[8]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, 20 FABIA Ensemble")
+goplot(ego_MF[[9]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, FABIA & MOFA Ensemble")
+goplot(ego_MF[[10]]) + labs(title = "enrichGO, Molecular Function, \n All Selected Genes, Gaussian Graphical Models")
+goplot(ego_MF[[11]]) + labs(title = "enrichGO, Molecular Function, \n All Genes in ACC Dataset")
+
+goplot(ego_BP[[1]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, Logistic Regression Glmnet")
+goplot(ego_BP[[2]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, Cox Regression Glmnet")
+goplot(ego_BP[[3]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, Squeezy")
+goplot(ego_BP[[4]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, Globaltest")
+goplot(ego_BP[[5]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, FABIA")
+goplot(ego_BP[[6]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, MOFA")
+goplot(ego_BP[[7]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, MFA")
+goplot(ego_BP[[8]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, 20 FABIA Ensemble")
+goplot(ego_BP[[9]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, FABIA & MOFA Ensemble")
+goplot(ego_BP[[10]]) + labs(title = "enrichGO, Biological Process, \n All Selected Genes, Gaussian Graphical Models")
+goplot(ego_BP[[11]]) + labs(title = "enrichGO, Biological Process, \n All Genes in ACC Dataset")
+
+goplot(ego_CC[[1]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, Logistic Regression Glmnet")
+goplot(ego_CC[[2]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, Cox Regression Glmnet")
+goplot(ego_CC[[3]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, Squeezy")
+goplot(ego_CC[[4]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, Globaltest")
+goplot(ego_CC[[5]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, FABIA")
+goplot(ego_CC[[6]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, MOFA")
+goplot(ego_CC[[7]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, MFA")
+goplot(ego_CC[[8]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, 20 FABIA Ensemble")
+goplot(ego_CC[[9]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, FABIA & MOFA Ensemble")
+goplot(ego_CC[[10]]) + labs(title = "enrichGO, Cellular Component, \n All Selected Genes, Gaussian Graphical Models")
+goplot(ego_CC[[11]]) + labs(title = "enrichGO, Cellular Component, \n All Genes in ACC Dataset")
+
+```
+
+# 3. Export Pathway Analysis result to data
+
+```{r}
+pathway = list("ggo_MF" = ggo_MF,
+               "ggo_BP" = ggo_BP,
+               "ggo_CC" = ggo_CC,
+               "ego_MF" = ego_MF,
+               "ego_BP" = ego_BP,
+               "ego_CC" = ego_CC)
+
+saveRDS(pathway, file = "data/out_pathway/pathways_methods_merged.rds")
+```
+

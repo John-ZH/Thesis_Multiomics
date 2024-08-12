@@ -1,0 +1,458 @@
+---
+title: "FABIA and MOFA results Comparison"
+author: "John Zhuang"
+date: "2024-06-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+#library(grid)
+#library(gridExtra)
+library(ggrepel)
+library(dplyr)
+library(RColorBrewer)
+```
+
+# 0. Preparation
+
+## A. Load FABIA and MOFA results
+
+```{r}
+FABIA.top5= readRDS(file = "data/sel_features/results_fabia_top_5_percent.rds")
+FABIA.top10= readRDS(file = "data/sel_features/results_fabia_top_10_percent.rds")
+FABIA.top25= readRDS(file = "data/sel_features/results_fabia_top_25_percent.rds")
+FABIA.Bic = readRDS(file = "data/sel_features/results_fabia_extracted_by_bic.rds")
+
+MOFA.top5= readRDS(file = "data/sel_features/results_mofa_top_5_percent.rds")
+MOFA.top10= readRDS(file = "data/sel_features/results_mofa_top_10_percent.rds")
+MOFA.top25= readRDS(file = "data/sel_features/results_mofa_top_25_percent.rds")
+MOFA.Bic = readRDS(file = "data/sel_features/results_mofa_extracted_by_bic.rds")
+```
+
+## B. Join FABIA and MOFA top X% loadings
+
+```{r}
+merge.FABIA.MOFA.results = function(FABIA.results, MOFA.results, total_bcf, bc, f = bc, complete = F) {
+  if (bc > total_bcf) {
+    stop("Requested bicluster number exceeds the total available biclusters.")
+  }
+  if (!(is.na(f)) & f > total_bcf) {
+    stop("Requested factor number exceeds the total available factors.")
+  }
+  
+  xbc = paste(total_bcf, "bc", sep = "")
+  biclusterx = paste("bicluster", bc, sep = "")
+  xf = paste(total_bcf, "f", sep = "")
+  Factorx = paste("Factor", f, sep = "")
+  FABIA.loadings = FABIA.results[[xbc]][[biclusterx]]
+  MOFA.weights = MOFA.results[[xf]][[Factorx]]
+  FABIA.df = as.data.frame(FABIA.loadings)
+  MOFA.df = as.data.frame(MOFA.weights)
+  FABIA.df$var = rownames(FABIA.df)
+  MOFA.df$var = rownames(MOFA.df)
+  #FABIA.df$FABIA.absL = abs(FABIA.df$FABIA.loadings) # Absolute values dropped: Calculated now by ggplot
+  #MOFA.df$MOFA.absW = abs(MOFA.df$MOFA.weights)
+  out = full_join(FABIA.df, MOFA.df, by = "var")
+  if (complete) {
+    out = out[complete.cases(out), ]
+  }
+  out
+}
+#fm.1.1 = full_join(FABIA.top5$`1bc`$bicluster1, MOFA.top5$`1bc`$bicluster1, by = )
+```
+
+```{r}
+# Old code to check number of shared features across FABIA and MOFA results.
+# Deprecated as now FABIA & MOFA results are plotted in grids
+check.FABIA.MOFA.overlap = function(FABIA.results, MOFA.results, total_bcf, against.plot = F) {
+  out.matrix = matrix(, nrow = total_bcf, ncol = total_bcf)
+  for(f in 1:total_bcf) {
+    for(bc in 1:total_bcf) {
+      curr.fm = merge.FABIA.MOFA.results(FABIA.results, MOFA.results, total_bcf, bc = bc, f = f)
+      overlap = sum(complete.cases(curr.fm))
+      #If using this function to check against plots, overlaps <= 2 are treated as no overlap
+      if (against.plot & overlap < 3) { 
+        overlap = 0
+      }
+      out.matrix[f,bc] = overlap
+    } 
+  }
+  out.matrix
+}
+```
+
+
+```{r}
+# Extract data omics category and add color for plotting
+retrieve.dataset.type = function(var.name) {
+  if (startsWith(var.name, "hsa")) {
+    out = "miRNASeqGene"
+  } else if (endsWith(var.name, "RPPA")) {
+    out = "RPPAArray"
+  } else if (endsWith(var.name, "R2Gn")) {
+    out = "RNASeq2GeneNorm"
+  } else {
+    out = NA
+  }
+  out
+}
+
+data.colors = setNames(c("red", "forestgreen", "blue"), c("miRNASeqGene", "RPPAArray", "RNASeq2GeneNorm"))
+```
+
+
+```{r}
+#Default data for generating a blank grid
+default.data = data.frame(var = c("ph1", "ph2"),
+                          FABIA.loadings = c(.8, 1.2),
+                          MOFA.weights = c(.8, 1.2),
+                          dataset = c("placeholder", "placeholder"))
+```
+
+```{r}
+plot.mf = function(plot.data) {
+  #plot.data = merged.mf.results[complete.cases(merged.mf.results), ] # Select complete cases only to avoid warnings, now deprecated as complete cases selection is done in FABIA-MOFA result merge.
+  plot.data$dataset = sapply(plot.data$var, retrieve.dataset.type)
+  if (nrow(plot.data) >= 3) {   # Minimum of 3 entries required to plot
+    p = ggplot(plot.data, aes(x=FABIA.loadings, y = MOFA.weights)) +
+    geom_point(show.legend = F, aes(x = abs(FABIA.loadings), y = abs(MOFA.weights),color = dataset)) +
+    stat_cor(method = "spearman", label.y.npc="top", label.x.npc = "left") +
+    theme(
+      axis.title = element_blank()
+    ) +
+    scale_color_manual(values = data.colors) #+
+    #xlim(min(abs(plot.data$FABIA.loadings)), max(abs(plot.data$FABIA.loadings)))
+    #geom_smooth(method = "lm") +
+    
+    #geom_text(nudge_y = .01, alpha = 0.4)
+  } else { # Print blank default plot if 2 or fewer shared variables.
+    #print(1)
+    p = ggplot(data = default.data, aes(x=FABIA.loadings, y = MOFA.weights, color = dataset)) +
+    theme(
+      axis.title = element_blank()
+    ) 
+  }
+  p
+}
+```
+
+```{r}
+#Plots without Spearman Correlation. Sets the range of x and y values to the min and max absolute values to allow better viewing.
+plot.mf.nospear = function(plot.data) {
+  #plot.data = merged.mf.results[complete.cases(merged.mf.results), ] # Select complete cases only to avoid warnings, now deprecated as complete cases selection is done in FABIA-MOFA result merge.
+  plot.data$dataset = sapply(plot.data$var, retrieve.dataset.type)
+  if (nrow(plot.data) >= 3) {   # Minimum of 3 entries required to plot
+    p = ggplot(plot.data, aes(x=FABIA.loadings, y = MOFA.weights)) +
+    geom_point(show.legend = F, aes(x = abs(FABIA.loadings), y = abs(MOFA.weights),color = dataset)) +
+    #stat_cor(method = "spearman", label.y.npc="top", label.x.npc = "left") +
+    theme(
+      axis.title = element_blank()
+    ) +
+    scale_color_manual(values = data.colors) +
+    xlim(min(abs(plot.data$FABIA.loadings)), max(abs(plot.data$FABIA.loadings))) +
+    ylim(min(abs(plot.data$MOFA.weights)), max(abs(plot.data$MOFA.weights)))
+    #geom_smooth(method = "lm") +
+    
+    #geom_text(nudge_y = .01, alpha = 0.4)
+  } else { # Print blank default plot if 2 or fewer shared variables.
+    #print(1)
+    p = ggplot(data = default.data, aes(x=FABIA.loadings, y = MOFA.weights, color = dataset)) +
+    theme(
+      axis.title = element_blank()
+    ) 
+  }
+  p
+}
+```
+
+```{r}
+plot.mf.grid = function(FABIA.results, MOFA.results, total_bcf,
+                        f_end = total_bcf, bc_end = total_bcf, f_start = 1, bc_start = 1, plot.spearman = T) {
+  plot.list = vector('list', (f_end - f_start+1) * (bc_end - bc_start + 1))
+  #spearman.list = vector('character', (f_end - f_start+1) * (bc_end - bc_start + 1))
+  for(bc in bc_start:bc_end) {
+    for(f in f_start:f_end) {
+      curr.mf = merge.FABIA.MOFA.results(FABIA.results, MOFA.results, total_bcf, bc = bc, f = f, complete = T)
+      if(plot.spearman) {
+        plot.i = plot.mf(curr.mf)
+      } else {
+        plot.i = plot.mf.nospear(curr.mf)
+      }
+      plot.list[[(bc_end - bc_start+1)*(f-f_start)+(bc-bc_start+1)]] = plot.i
+      #if (sum(complete.cases(curr.mf)) >= 3) {
+      #  spearman.data = curr.mf[complete.cases(curr.mf), ]
+      #  spearman.test = cor.test(x = spearman.data$FABIA.loadings,
+      #                           y = spearman.data$MOFA.weights,
+      #                           method="spearman")
+      #  spearman.list[[(bc_end - bc_start+1)*(f-f_start)+(bc-bc_start+1)]] == paste("Rho:", spearman.test$estimate, "P-value:", spearman.test$estimate)
+      #}
+    }
+  }
+  #plot.list
+  f = ggarrange(plotlist = plot.list,
+            common.legend = T,
+            legend = "right",
+            #labels = spearman.list,
+            nrow = f_end-f_start+1, ncol = bc_end-bc_start+1)
+  #grid.arrange(
+  #  arrangeGrob(grobs = plot.list, ncol = total_bcf, nrow = total_bcf,
+  #              bottom=textGrob("FABIA Loadings (Absolute Value)", gp=gpar(fontface="bold", col="red", fontsize=15)), 
+  #              left=textGrob("MOFA Weights, (Absolute Value)", gp=gpar(fontface="bold", col="blue", fontsize=15), rot=90)),
+  #)
+  bcf.text = paste(total_bcf, "Biclusters/Factors")
+  top.annotate = text_grob(bcf.text, color = "black", face = "bold", size = 20)
+  if (any(bc_end != total_bcf, f_end != total_bcf, bc_start != 1, f_start != 1)) {
+    bcf.text = paste(bcf.text, "\n", "(Biclusters", bc_start, "to", bc_end, ",",
+                   "Factors", f_start, "to", f_end,")")
+    top.annotate = text_grob(bcf.text, color = "black", face = "bold", size = 10)
+  }
+  annotate_figure(f,
+                  top = top.annotate,
+                  bottom = text_grob("FABIA Loadings (Absolute Value)", color = "blue", face = "bold", size = 15),
+                  left = text_grob("MOFA Weights, (Absolute Value)", color = "forestgreen", face = "bold", size = 15, rot = 90))
+  #print(spearman.list)
+}
+```
+
+```{r}
+# Plot only one pair of bicluster/factor with added labels support (for individual plots exploration)
+plot.mf.one = function(FABIA.results, MOFA.results, total_bcf, bc, f) {
+  plot.data = merge.FABIA.MOFA.results(FABIA.results, MOFA.results, total_bcf, bc, f, complete = T)
+  
+  plot.data$dataset = sapply(plot.data$var, retrieve.dataset.type)
+  if (nrow(plot.data) >= 3) {   # Minimum of 3 entries required to plot
+    p = ggplot(plot.data, aes(x=FABIA.loadings, y = MOFA.weights, label = var)) +
+    geom_point(show.legend = F, aes(color = dataset)) +
+    stat_cor(method = "spearman", label.y.npc="bottom", label.x.npc = 0.8) +
+    scale_color_manual(values = data.colors) +
+    geom_text_repel(data=plot.data, alpha = 1, size = 3,
+                  force = 300, force_pull = 1,
+                  max.overlaps = 10) 
+  } else { # Print blank default plot if 2 or fewer shared variables.
+
+    p = ggplot(data = default.data, aes(x=FABIA.loadings, y = MOFA.weights, color = dataset)) 
+  }
+  p = p + theme(
+      axis.title = element_blank()
+    ) 
+  oneplot.text = paste("Bicluster", bc, "&", "Factor", f, "\n(Of", total_bcf, "Biclusters/Factors)")
+  top.annotate = text_grob(oneplot.text, color = "black", face = "bold", size = 10)
+  annotate_figure(p,
+                  top = top.annotate,
+                  bottom = text_grob("FABIA Loadings", color = "blue", face = "bold", size = 15),
+                  left = text_grob("MOFA Weights", color = "forestgreen", face = "bold", size = 15, rot = 90))
+}
+```
+
+```{r, eval = F}
+# Old code for manually computing Spearman correlation.
+# Deprecated in favor of plotting it directly on the plot.
+spearman.FABIA.MOFA = function(FABIA.results, MOFA.results, total_bcf) {
+  out.matrix = matrix(, nrow = total_bcf, ncol = total_bcf)
+  for(f in 1:total_bcf) {
+    for(bc in 1:total_bcf) {
+      curr.fm = merge.FABIA.MOFA.results(FABIA.results, MOFA.results, total_bcf, bc = bc, f = f)
+      spearman.data = curr.fm[complete.cases(curr.fm), ]
+      #print(spearman.data)
+      #out.matrix[bc,f] = cor.test(x = spearman.data$FABIA.absL, y = spearman.data$MOFA.absW, method="spearman")
+      test = cor.test(x = spearman.data$FABIA.loadings, y = spearman.data$MOFA.weights, method="spearman")
+    } 
+  }
+  #out.matrix
+  test
+}
+```
+
+
+# 1. FABIA-MOFA variables comparison (Extracted by extractBic() L threashold)
+
+```{r}
+check.FABIA.MOFA.overlap(FABIA.Bic, MOFA.Bic, 1, against.plot = T)
+```
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 1)
+```
+```{r}
+check.FABIA.MOFA.overlap(FABIA.Bic, MOFA.Bic, 2, against.plot = T)
+```
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 2)
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 2, plot.spearman = F)
+```
+```{r}
+check.FABIA.MOFA.overlap(FABIA.Bic, MOFA.Bic, 3, against.plot = T)
+```
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 3)
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 3, plot.spearman = F)
+```
+```{r}
+check.FABIA.MOFA.overlap(FABIA.Bic, MOFA.Bic, 5, against.plot = T)
+```
+
+
+
+```{r, fig.width=10, fig.height=10}
+#dev.new(width = 10, height = 10, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 5)
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 5, plot.spearman = F)
+```
+
+```{r}
+check.FABIA.MOFA.overlap(FABIA.Bic, MOFA.Bic, 5, against.plot = T)
+```
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 10)
+plot.mf.grid(FABIA.Bic, MOFA.Bic, 10, plot.spearman = F)
+```
+## 1B. Individual Plots Worth Exploring:
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.Bic, MOFA.Bic, 1, 1, 1)
+```
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.Bic, MOFA.Bic, 3, 2, 1)
+```
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.Bic, MOFA.Bic, 3, 3, 1)
+```
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.Bic, MOFA.Bic, 5, 1, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 5, 2, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 5, 2, 3)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 5, 3, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 5, 5, 2)
+```
+
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 1, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 2, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 3, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 9, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 10, 2)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 7, 4)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 9, 4)
+plot.mf.one(FABIA.Bic, MOFA.Bic, 10, 10, 4)
+```
+
+Export overlaping Biclusters with linear combination of bicluster and factor
+```{r}
+fabia.mofa = list("b1f1.1" = merge.FABIA.MOFA.results(FABIA.Bic, MOFA.Bic, 1, 1, 1, complete = T),
+                  "b1f2.10" = merge.FABIA.MOFA.results(FABIA.Bic, MOFA.Bic, 10, 1, 2, complete = T))
+saveRDS(fabia.mofa, file = "data/sel_features/fabia_mofa_overlap_of_interest.rds")
+```
+
+
+Deprecated, kept for completeness:
+
+# 2. FABIA-MOFA variables comparison (Top 5%)
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.grid(FABIA.top5, MOFA.top5, 1)
+```
+
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.grid(FABIA.top5, MOFA.top5, 2)
+```
+
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.grid(FABIA.top5, MOFA.top5, 3)
+```
+
+
+```{r, fig.width=10, fig.height=10}
+#dev.new(width = 10, height = 10, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.top5, MOFA.top5, 5)
+```
+
+```{r, eval=F}
+plot.mf.grid(FABIA.top5, MOFA.top5, 10, 5, 5, 1, 1)
+plot.mf.grid(FABIA.top5, MOFA.top5, 10, 5, 10, 1, 6)
+plot.mf.grid(FABIA.top5, MOFA.top5, 10, 10, 5, 6, 1)
+plot.mf.grid(FABIA.top5, MOFA.top5, 10, 10, 10, 6, 6)
+```
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.top5, MOFA.top5, 10)
+```
+
+## 2B. Individual Plots Worth Exploring:
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.top5, MOFA.top5, 1, 1, 1)
+```
+
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.top5, MOFA.top5, 5, 2, 2)
+```
+```{r, fig.width=8, fig.height=8}
+plot.mf.one(FABIA.top5, MOFA.top5, 10, 1, 2)
+plot.mf.one(FABIA.top5, MOFA.top5, 10, 2, 2)
+
+```
+
+# 3. FABIA-MOFA variables comparison (Top 10%)
+
+```{r}
+plot.mf.grid(FABIA.top10, MOFA.top10, 1)
+```
+
+```{r}
+plot.mf.grid(FABIA.top10, MOFA.top10, 2)
+```
+
+```{r}
+plot.mf.grid(FABIA.top10, MOFA.top10, 3)
+```
+
+```{r, fig.width=10, fig.height=10}
+#dev.new(width = 10, height = 10, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.top10, MOFA.top10, 5)
+```
+
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.top10, MOFA.top10, 10)
+```
+
+# 4. FABIA-MOFA variables comparison (Top 25%)
+
+```{r}
+plot.mf.grid(FABIA.top25, MOFA.top25, 1)
+```
+
+```{r}
+plot.mf.grid(FABIA.top25, MOFA.top25, 2)
+```
+
+```{r}
+plot.mf.grid(FABIA.top25, MOFA.top25, 3)
+```
+
+```{r, fig.width=10, fig.height=10}
+#dev.new(width = 10, height = 10, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.top25, MOFA.top25, 5)
+```
+
+```{r, fig.width=20, fig.height=20}
+#dev.new(width = 20, height = 20, unit = "in", noRStudioGD = T)
+plot.mf.grid(FABIA.top25, MOFA.top25, 10)
+```
+

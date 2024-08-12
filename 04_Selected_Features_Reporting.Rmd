@@ -1,0 +1,299 @@
+---
+title: "Report for all Selected Features"
+author: "John Zhuang"
+date: "2024-08-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(knitr)
+```
+
+# 1. Loading of Results
+
+## 0. Function to present variables in a clean, ordered format.
+
+Variables are ordered by their absolute weight/coefficient/contribution/significance.
+
+```{r}
+multiomics.result.table = function(result, colval = "coef", p.value = F) {
+  if (is.vector(result)) { # If named vector
+    result = as.data.frame(result)
+    names(result)[1] = colval
+    result = result[order(abs(result[,1]), decreasing = T), , drop = F]
+  } else if (is.data.frame(result) ) { # If data.frame, assume variable name is on column 1 and weight on column 2
+    if (!p.value) {
+      result = result[order(abs(result[,2]), decreasing = T), ] # If regular weights, rank by decreasing absolute value.
+    } else {
+      result = result[order(result[,2], decreasing = F), ] # If p-values, rank by increasing (smaller = most significant)
+    }
+  }
+  return(result)
+}
+```
+
+## 1A. Seperate Lasso & Elastic Net (Glmnet)
+
+```{r}
+results.glmnet=readRDS("data/sel_features/results_glmnet_coef.rds")
+#results.glmnet
+```
+
+
+
+```{r}
+kable(multiomics.result.table(results.glmnet$fold3$elasticnet_0.5$mse[-1]), caption = "3-Fold Glmnet, alpha = 0.5, MSE")
+kable(multiomics.result.table(results.glmnet$fold3$elasticnet_0.5$auc[-1]), caption = "3-Fold Glmnet, alpha = 0.5, AUC")
+kable(multiomics.result.table(results.glmnet$fold3$lasso$auc[-1]), caption = "3-Fold Glmnet, alpha = 1, AUC")
+kable(multiomics.result.table(results.glmnet$fold5$lasso$mse[-1]), caption = "5-Fold Glmnet, alpha = 1, MSE")
+
+kable(multiomics.result.table(results.glmnet$fold5$elasticnet_0.2$mse[-1]), caption = "5-Fold Glmnet, alpha = 0.2, MSE")
+kable(multiomics.result.table(results.glmnet$fold10$elasticnet_0.2$mse[-1]), caption = "10-Fold Glmnet, alpha = 0.2, MSE")
+kable(multiomics.result.table(results.glmnet$fold10$elasticnet_0.2$dev[-1]), caption = "10-Fold Glmnet, alpha = 0.2, Deviance")
+```
+
+
+## 1B. Group-based Lasso & Elastic Net (Squeezy)
+
+Xtune reports no selected features and thus is not included.
+
+```{r}
+results.squeezy = readRDS("data/sel_features/results_squeezy_coef.rds")
+#results.squeezy
+```
+```{r}
+kable(multiomics.result.table(results.squeezy$fold3$elasticnet_0.5$multigroup), caption = "3-Fold Squeezy, alpha = 0.5, multiple lambdas")
+kable(multiomics.result.table(results.squeezy$fold3$elasticnet_0.5$onegroup), caption = "3-Fold Squeezy, alpha = 0.5, one lambda")
+kable(multiomics.result.table(results.squeezy$fold3$lasso$multigroup), caption = "3-Fold Squeezy, alpha = 1, multiple lambdas")
+kable(multiomics.result.table(results.squeezy$fold3$lasso$onegroup), caption = "3-Fold Squeezy, alpha = 1, one lambda")
+
+kable(multiomics.result.table(results.squeezy$fold5$elasticnet_0.5$multigroup), caption = "5-Fold Squeezy, alpha = 0.5, multiple lambdas")
+kable(multiomics.result.table(results.squeezy$fold5$elasticnet_0.5$onegroup), caption = "5-Fold Squeezy, alpha = 0.5, one lambda")
+kable(multiomics.result.table(results.squeezy$fold5$lasso$multigroup), caption = "5-Fold Squeezy, alpha = 1, multiple lambdas")
+kable(multiomics.result.table(results.squeezy$fold5$lasso$onegroup), caption = "5-Fold Squeezy, alpha = 1, one lambda")
+
+kable(multiomics.result.table(results.squeezy$fold10$elasticnet_0.5$multigroup), caption = "10-Fold Squeezy, alpha = 0.5, multiple lambdas")
+kable(multiomics.result.table(results.squeezy$fold10$elasticnet_0.5$onegroup), caption = "10-Fold Squeezy, alpha = 0.5, one lambda")
+kable(multiomics.result.table(results.squeezy$fold10$lasso$multigroup), caption = "10-Fold Squeezy, alpha = 1, multiple lambdas")
+kable(multiomics.result.table(results.squeezy$fold10$lasso$onegroup), caption = "10-Fold Squeezy, alpha = 1, one lambda")
+```
+
+
+## 1C. Globaltest
+
+```{r}
+results.globaltest = readRDS("data/sel_features/results_globaltest_sig.rds")
+#results.globaltest
+```
+
+```{r}
+kable(multiomics.result.table(results.globaltest$miRNASeqGene, p.value = T), caption = "Significant Globaltest results, miRNASeqGene", row.names = NA)
+kable(multiomics.result.table(results.globaltest$RNASeq2GeneNorm, p.value = T), caption = "Significant Globaltest results, RNASeq2GeneNorm", row.names = NA)
+kable(multiomics.result.table(results.globaltest$RPPAArray, p.value = T), caption = "Significant Globaltest results, RPPAArray", row.names = NA)
+```
+
+
+## 1D. Cox regression Lasso & Elastic Net (Glmnet, lambda.1se)
+
+```{r}
+results.glmnet.cox = readRDS("data/sel_features/results_glmnet_cox_coef_1se.rds")
+#results.glmnet.cox
+```
+
+```{r}
+kable(multiomics.result.table(results.glmnet.cox$fold3$elasticnet_0.5$dev), caption = "3-Fold Cox Glmnet, alpha = 0.5, Deviance")
+kable(multiomics.result.table(results.glmnet.cox$fold3$elasticnet_0.5$c), caption = "3-Fold Cox Glmnet, alpha = 0.5, C-index")
+kable(multiomics.result.table(results.glmnet.cox$fold3$lasso$dev), caption = "3-Fold Cox Glmnet, alpha = 1, Deviance")
+kable(multiomics.result.table(results.glmnet.cox$fold3$lasso$c), caption = "3-Fold Cox Glmnet, alpha = 1, C-index")
+#kable(multiomics.result.table(results.glmnet.cox$fold5$elasticnet_0.5$dev), caption = "5-Fold Cox Glmnet, alpha = 0.5, Deviance")
+kable(multiomics.result.table(results.glmnet.cox$fold5$elasticnet_0.5$c), caption = "5-Fold Cox Glmnet, alpha = 0.5, C-index")
+kable(multiomics.result.table(results.glmnet.cox$fold5$lasso$dev), caption = "5-Fold Cox Glmnet, alpha = 1, Deviance")
+kable(multiomics.result.table(results.glmnet.cox$fold5$lasso$c), caption = "5-Fold Cox Glmnet, alpha = 1, C-index")
+kable(multiomics.result.table(results.glmnet.cox$fold10$elasticnet_0.5$dev), caption = "10-Fold Cox Glmnet, alpha = 0.5, Deviance")
+kable(multiomics.result.table(results.glmnet.cox$fold10$elasticnet_0.5$c), caption = "10-Fold Cox Glmnet, alpha = 0.5, C-index")
+kable(multiomics.result.table(results.glmnet.cox$fold10$lasso$dev), caption = "10-Fold Cox Glmnet, alpha = 1, Deviance")
+kable(multiomics.result.table(results.glmnet.cox$fold10$lasso$c), caption = "10-Fold Cox Glmnet, alpha = 1, C-index")
+```
+
+## 2A. FABIA (Seperate)
+
+Features selected by 1, 2, 3, 5, and 10-bicluster FABIA are demonstrated here.
+
+```{r}
+results.fabia = readRDS("data/sel_features/results_fabia_extracted_by_bic.rds")
+```
+
+```{r}
+kable(multiomics.result.table(results.fabia$`1bc`$bicluster1, colval = "loadings"), caption = "FABIA, Bicluster 1 of 1")
+
+kable(multiomics.result.table(results.fabia$`2bc`$bicluster1, colval = "loadings"), caption = "FABIA, Bicluster 1 of 2")
+kable(multiomics.result.table(results.fabia$`2bc`$bicluster2, colval = "loadings"), caption = "FABIA, Bicluster 2 of 2")
+
+kable(multiomics.result.table(results.fabia$`3bc`$bicluster1, colval = "loadings"), caption = "FABIA, Bicluster 1 of 3")
+kable(multiomics.result.table(results.fabia$`3bc`$bicluster2, colval = "loadings"), caption = "FABIA, Bicluster 2 of 3")
+kable(multiomics.result.table(results.fabia$`3bc`$bicluster3, colval = "loadings"), caption = "FABIA, Bicluster 3 of 3")
+
+kable(multiomics.result.table(results.fabia$`5bc`$bicluster1, colval = "loadings"), caption = "FABIA, Bicluster 1 of 5")
+kable(multiomics.result.table(results.fabia$`5bc`$bicluster2, colval = "loadings"), caption = "FABIA, Bicluster 2 of 5")
+kable(multiomics.result.table(results.fabia$`5bc`$bicluster3, colval = "loadings"), caption = "FABIA, Bicluster 3 of 5")
+kable(multiomics.result.table(results.fabia$`5bc`$bicluster4, colval = "loadings"), caption = "FABIA, Bicluster 4 of 5")
+kable(multiomics.result.table(results.fabia$`5bc`$bicluster5, colval = "loadings"), caption = "FABIA, Bicluster 5 of 5")
+
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster1, colval = "loadings"), caption = "FABIA, Bicluster 1 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster2, colval = "loadings"), caption = "FABIA, Bicluster 2 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster3, colval = "loadings"), caption = "FABIA, Bicluster 3 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster4, colval = "loadings"), caption = "FABIA, Bicluster 4 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster5, colval = "loadings"), caption = "FABIA, Bicluster 5 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster6, colval = "loadings"), caption = "FABIA, Bicluster 6 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster7, colval = "loadings"), caption = "FABIA, Bicluster 7 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster8, colval = "loadings"), caption = "FABIA, Bicluster 8 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster9, colval = "loadings"), caption = "FABIA, Bicluster 9 of 10")
+kable(multiomics.result.table(results.fabia$`10bc`$bicluster10, colval = "loadings"), caption = "FABIA, Bicluster 10 of 10")
+
+
+
+```
+
+
+## 2B. MFA
+
+```{r}
+results.MFA = readRDS("data/sel_features/results_mfa_selected.rds")
+#results.MFA
+```
+```{r}
+kable(multiomics.result.table(results.MFA$Dim1, colval = "contribution (%)"), caption = "MFA, Top Contributors for Dimension 1")
+kable(multiomics.result.table(results.MFA$Dim2, colval = "contribution (%)"), caption = "MFA, Top Contributors for Dimension 2")
+kable(multiomics.result.table(results.MFA$Dim3, colval = "contribution (%)"), caption = "MFA, Top Contributors for Dimension 3")
+```
+
+
+## 2C. MOFA
+
+```{r}
+results.mofa = readRDS("data/sel_features/results_mofa_extracted_by_bic.rds")
+```
+
+```{r}
+kable(multiomics.result.table(results.mofa$`1f`$Factor1, colval = "weights"), caption = "MOFA, Factor 1 of 1")
+
+kable(multiomics.result.table(results.mofa$`2f`$Factor1, colval = "weights"), caption = "MOFA, Factor 1 of 2")
+kable(multiomics.result.table(results.mofa$`2f`$Factor2, colval = "weights"), caption = "MOFA, Factor 2 of 2")
+
+kable(multiomics.result.table(results.mofa$`3f`$Factor1, colval = "weights"), caption = "MOFA, Factor 1 of 3")
+kable(multiomics.result.table(results.mofa$`3f`$Factor2, colval = "weights"), caption = "MOFA, Factor 2 of 3")
+kable(multiomics.result.table(results.mofa$`3f`$Factor3, colval = "weights"), caption = "MOFA, Factor 3 of 3")
+
+kable(multiomics.result.table(results.mofa$`5f`$Factor1, colval = "weights"), caption = "MOFA, Factor 1 of 5")
+kable(multiomics.result.table(results.mofa$`5f`$Factor2, colval = "weights"), caption = "MOFA, Factor 2 of 5")
+kable(multiomics.result.table(results.mofa$`5f`$Factor3, colval = "weights"), caption = "MOFA, Factor 3 of 5")
+kable(multiomics.result.table(results.mofa$`5f`$Factor4, colval = "weights"), caption = "MOFA, Factor 4 of 5")
+kable(multiomics.result.table(results.mofa$`5f`$Factor5, colval = "weights"), caption = "MOFA, Factor 5 of 5")
+
+kable(multiomics.result.table(results.mofa$`10f`$Factor1, colval = "weights"), caption = "MOFA, Factor 1 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor2, colval = "weights"), caption = "MOFA, Factor 2 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor3, colval = "weights"), caption = "MOFA, Factor 3 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor4, colval = "weights"), caption = "MOFA, Factor 4 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor5, colval = "weights"), caption = "MOFA, Factor 5 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor6, colval = "weights"), caption = "MOFA, Factor 6 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor7, colval = "weights"), caption = "MOFA, Factor 7 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor8, colval = "weights"), caption = "MOFA, Factor 8 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor9, colval = "weights"), caption = "MOFA, Factor 9 of 10")
+kable(multiomics.result.table(results.mofa$`10f`$Factor10, colval = "weights"), caption = "MOFA, Factor 10 of 10")
+```
+
+
+## 2E. MOFA & FABIA (Superbicluster)
+
+Due to structuring of the data, they cannot be exported in table format.
+
+Thus, they will be presented in raw R output.
+```{r}
+results.superbiclust.fabia20 = readRDS("data/sel_features/results_superbiclust.fabia.rds")
+results.superbiclust.fabia_mofa = readRDS("data/sel_features/results_superbiclust.fabia_mofa.rds")
+```
+
+Selected features for Ensemble of 20 10-bicluster FABIA:
+```{r}
+results.superbiclust.fabia20$resNames
+```
+
+Selected features for Ensemble of 10-bicluster FABIA and 10-factor MOFA:
+```{r}
+results.superbiclust.fabia_mofa$resNames
+```
+
+## 3. Gaussian Graphical Models
+
+```{r}
+results.ggm = readRDS("data/sel_features/results_ggm_network_stats_all.rds")
+#results.ggm
+```
+```{r}
+ggm.RPPA = results.ggm$full_sample$`RPPA Array`$`FDR1e-1`
+kable(ggm.RPPA[which(ggm.RPPA$degree > 0), 1, drop = F], caption = "RPPAArray, FDRcut = 0.9")
+
+ggm.R2Gn.min = results.ggm$full_sample$RNASeq2GeneNorm$`FDR1e-14`
+kable(ggm.R2Gn.min[which(ggm.R2Gn.min$degree > mean(ggm.R2Gn.min$degree)),1, drop=F], caption = "RNASeq2GeneNorm, FDRcut = 1-1e-14")
+#ggm.R2Gn.6 = results.ggm$full_sample$RNASeq2GeneNorm$`FDR1e-6`
+#ggm.R2Gn.6[which(ggm.R2Gn.6$degree > mean(ggm.R2Gn.6$degree)),1, drop=F]
+
+ggm.mRSG.min = results.ggm$full_sample$miRNASeqGene$`FDR1e-13`
+kable(ggm.mRSG.min[which(ggm.mRSG.min$degree > mean(ggm.mRSG.min$degree)),1, drop=F], caption = "miRNASeqGene, FDRcut = 1-1e-13")
+#ggm.mRSG.6 = results.ggm$full_sample$miRNASeqGene$`FDR1e-6`
+#ggm.mRSG.6[which(ggm.mRSG.6$degree > mean(ggm.mRSG.6$degree)),1, drop=F]
+
+ggm.all.min = results.ggm$full_sample$all$`FDR1e-14`
+kable(ggm.all.min[which(ggm.all.min$degree > mean(ggm.all.min$degree)),1, drop=F], caption = "All data, FDRcut = 1-1e-14")
+#ggm.all.6 = results.ggm$full_sample$all$`FDR1e-6`
+#ggm.all.6[which(ggm.all.6$degree > mean(ggm.all.6$degree)),1, drop=F]
+
+ggm.RPPA.a = results.ggm$by_vital_status$`RPPA Array`$alive$`FDR1e-1`
+kable(ggm.RPPA.a[which(ggm.RPPA.a$degree > 0), 1, drop = F], caption = "RPPAArray, FDRcut = 0.9, Surviving Patients")
+
+ggm.RPPA.d = results.ggm$by_vital_status$`RPPA Array`$dead$`FDR1e-1`
+kable(ggm.RPPA.d[which(ggm.RPPA.d$degree > 0), 1, drop = F], caption = "RPPAArray, FDRcut = 0.9, Deceased Patients")
+
+
+ggm.R2Gn.min.a = results.ggm$by_vital_status$RNASeq2GeneNorm$alive$`FDR1e-14`
+kable(ggm.R2Gn.min.a[which(ggm.R2Gn.min.a$degree > mean(ggm.R2Gn.min.a$degree)), 1, drop = F], caption = "RNASeq2GeneNorm, FDRcut = 1-1e-14, Surviving Patients")
+
+ggm.R2Gn.min.d = results.ggm$by_vital_status$RNASeq2GeneNorm$dead$`FDR1e-14`
+kable(ggm.R2Gn.min.d[which(ggm.R2Gn.min.d$degree > mean(ggm.R2Gn.min.d$degree)), 1, drop = F], caption = "RNASeq2GeneNorm, FDRcut = 1-1e-14, Deceased Patients")
+
+
+#ggm.R2Gn.6.a = results.ggm$by_vital_status$RNASeq2GeneNorm$alive$`FDR1e-6`
+#ggm.R2Gn.6.a[which(ggm.R2Gn.6.a$degree > mean(ggm.R2Gn.6.a$degree)), 1, drop = F]
+
+#ggm.R2Gn.6.d = results.ggm$by_vital_status$RNASeq2GeneNorm$dead$`FDR1e-6`
+#ggm.R2Gn.6.d[which(ggm.R2Gn.6.d$degree > mean(ggm.R2Gn.6.d$degree)), 1, drop = F]
+
+ggm.mRSG.min.a = results.ggm$by_vital_status$miRNASeqGene$alive$`FDR1e-13`
+kable(ggm.mRSG.min.a[which(ggm.mRSG.min.a$degree > mean(ggm.mRSG.min.a$degree)), 1, drop = F], caption = "miRNASeqGene, FDRcut = 1-1e-13, Surviving Patients")
+
+ggm.mRSG.min.d = results.ggm$by_vital_status$miRNASeqGene$dead$`FDR1e-13`
+kable(ggm.mRSG.min.d[which(ggm.mRSG.min.d$degree > mean(ggm.mRSG.min.d$degree)), 1, drop = F], caption = "miRNASeqGene, FDRcut = 1-1e-13, Deceased Patients")
+
+ggm.all.min.a = results.ggm$by_vital_status$all$alive$`FDR1e-14`
+kable(ggm.all.min.a[which(ggm.all.min.a$degree > mean(ggm.all.min.a$degree)), 1, drop = F], caption = "All data, FDRcut = 1-1e-14, Surviving Patients")
+
+ggm.all.min.d = results.ggm$by_vital_status$all$dead$`FDR1e-14`
+kable(ggm.all.min.d[which(ggm.all.min.d$degree > mean(ggm.all.min.d$degree)), 1, drop = F], caption = "All data, FDRcut = 1-1e-14, Deceased Patients")
+
+#ggm.RR.min.a = results.ggm$by_vital_status$`RPPA + R2Gn`$alive$`FDR1e-14`
+#ggm.RR.min.a[which(ggm.RR.min.a$degree > mean(ggm.RR.min.a$degree)), 1, drop = F]
+
+#ggm.RR.min.d = results.ggm$by_vital_status$`RPPA + R2Gn`$dead$`FDR1e-14`
+#ggm.RR.min.d[which(ggm.RR.min.d$degree > mean(ggm.RR.min.d$degree)), 1, drop = F]
+
+#ggm.RR.6.a = results.ggm$by_vital_status$`RPPA + R2Gn`$alive$`FDR1e-6`
+#ggm.RR.6.a[which(ggm.RR.6.a$degree > mean(ggm.RR.6.a$degree)), 1, drop = F]
+
+#ggm.RR.6.d = results.ggm$by_vital_status$`RPPA + R2Gn`$dead$`FDR1e-6`
+#ggm.RR.6.d[which(ggm.RR.6.d$degree > mean(ggm.RR.6.d$degree)), 1, drop = F]
+
+```

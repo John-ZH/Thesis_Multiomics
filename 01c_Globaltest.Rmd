@@ -1,0 +1,130 @@
+---
+title: "Globaltest"
+author: "John Zhuang"
+date: "2024-06-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+library(globaltest)
+library(ggplot2)
+library(dplyr)
+```
+
+# 0. Data Preparation
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_joined.rds")
+```
+
+Keep only columns relevant for globaltest (all numerical datasets) and convert them into matrices:
+
+```{r}
+gt.matrix = as.matrix(data.horizontal[,1:701])
+```
+
+# 1. Globaltest
+
+```{r}
+Y = data.horizontal$vital_status
+```
+```{r, fig.width=70, fig.height=10}
+x.mRSG = gt.matrix[, 1:470]
+gt.mRSG = covariates(gt(Y ~ x.mRSG, model = "logistic"),
+                     cluster = T, help.lines = T, alias = colnames(x.mRSG),
+                     cex.labels = 0.5, colors = c(2,3))
+```
+```{r, fig.width=20, fig.height=10}
+x.R2Gn = gt.matrix[, 471:668]
+gt.R2Gn = covariates(gt(Y ~ x.R2Gn, model = "logistic"),
+                     cluster = T, help.lines = T, alias = colnames(x.R2Gn),
+                     cex.labels = 0.5, colors = c(2,3))
+```
+```{r, fig.width=15, fig.height=10}
+x.RPPA = gt.matrix[, 669:701]
+gt.RPPA = covariates(gt(Y ~ x.RPPA, model = "logistic"),
+                     cluster = T, help.lines = T, alias = colnames(x.RPPA),
+                     cex.labels = 0.7, colors = c(2,3))
+```
+
+## A. Zoomed-in miRNASeqGene and RNASeq2GeneNorm
+
+Since the plots for miRNASeqGene and RNASeq2GeneNorm contain too many variables,
+we will zoom in on the ones with the smallest p values.
+
+```{r}
+# Return the top most significant results from a Globaltest covariate object
+# Select all significant p values with a limit of 0.05 (default), or any other limit
+# or select the top n most significant variables (overwrites limit if not NA)
+get.significant.pvalues = function(gtcov, limit = 0.05, n = NA) {
+  res = result(gtcov)[,c("alias", "p-value")]
+  dir = ((extract(gtcov))@extra)[,c("alias", "direction")]
+  out = right_join(res, dir, by = "alias")
+  names(out) = c("var", "p.value", "direction")
+  out = out[order(out$p.value),] # Order by p-value
+  #out$p.1.minus = 1 - out$p.value # Use 1-p for plotting
+  if (!is.na(n)) {
+    out = out[1:n,]  # Select the first (value) variables with the smallest p-values
+  } else {
+    out = out[out$p.value <= limit,] # Cut off based on p-value limit
+  }
+  out
+}
+```
+
+```{r}
+# Manually visualize the dataframe selected from get.significant.pvalues
+# Optional: horizontal line drawing at selected p value.
+gtcov.manual = function(gtp, limit = NULL) {
+  p = ggplot(data = gtp, aes(x=var, y=log10(p.value), fill = direction)) +
+    geom_bar(stat="identity", show.legend = T) + 
+    scale_y_reverse(labels = c(0.001, 0.01, 0.1, 1)) +
+    scale_x_discrete(guide = guide_axis(angle = 90)) +
+    #theme(axis.text.x=element_text(size=rel(0.5), angle=90)) +
+    scale_fill_manual(values = c(3,2)) +
+    #scale_y_log10()
+    ylab("p-value")
+  
+  if (!is.null(limit)) {
+    p = p + geom_hline(yintercept=log10(limit), linetype="dashed", 
+                color = "black")
+  }
+  p
+}
+```
+
+For miRNASeqGene, we plot all variables that correspond to a significant p value (<0.05).
+
+For RNASeq2GeneNorm, we plot the top 70 smallest p values (not all of them are significant).
+
+The threashold alpha = 0.05 is plotted as a dashed black line.
+
+```{r, fig.width=15, fig.height=10}
+gtcov.manual(get.significant.pvalues(gt.mRSG), limit = 0.05)
+gtcov.manual(get.significant.pvalues(gt.R2Gn, n = 70), limit = 0.05)
+```
+
+## B. Save significant (P <= 0.05) to external file
+
+```{r}
+results.globaltest = list("miRNASeqGene" = get.significant.pvalues(gt.mRSG),
+                          "RNASeq2GeneNorm" = get.significant.pvalues(gt.R2Gn),
+                          "RPPAArray" = get.significant.pvalues(gt.RPPA))
+saveRDS(results.globaltest, file = "data/sel_features/results_globaltest_sig.rds")
+```
+
+## C. Save Globaltest models to external file
+
+```{r}
+models.globaltest = list("miRNASeqGene" = gt.mRSG,
+                          "RNASeq2GeneNorm" = gt.R2Gn,
+                          "RPPAArray" = gt.RPPA)
+saveRDS(models.globaltest, file = "data/out_models/results_globaltest.rds")
+```
+

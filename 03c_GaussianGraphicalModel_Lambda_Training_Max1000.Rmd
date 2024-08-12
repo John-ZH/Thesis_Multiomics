@@ -1,0 +1,255 @@
+---
+title: "Gaussian Graphical Model Lambda Training (lambdaMax = 1000)"
+author: "John Zhuang"
+date: "2024-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rags2ridges)
+```
+
+The purpose of this document is to separate optimal lambda exploration from the main GGM training document,
+
+so that rendering time could be saved for the main document.
+
+In this version, we will see what happens to the optimal lambdas if lambdaMax = 1000.
+
+# 0. Data Preparation
+
+```{r}
+data.horizontal = readRDS("data/derived/data_horizontal_joined.rds")
+data.numeric = as.matrix(data.horizontal[, 1:701])
+data.Y = data.horizontal$vital_status
+```
+
+```{r}
+group.mRSG = 1:470
+group.R2Gn = 471:668
+group.RPPA = 669:701
+```
+
+# 1. Wholistic analysis by omic 
+
+## A. RPPAArray
+
+```{r}
+data.RPPA = data.numeric[, group.RPPA]
+```
+
+```{r}
+set.seed(42)
+opt.RPPA = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.RPPA.10 = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.RPPA.5 = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.RPPA.3 = optPenalty.kCVauto(Y = data.RPPA, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.RPPA = setNames(c(opt.RPPA.3$optLambda, opt.RPPA.5$optLambda, opt.RPPA.10$optLambda, opt.RPPA$optLambda), c(3,5,10,43))
+Lambdas.RPPA
+```
+## B. RNASeq2GeneNorm
+
+```{r}
+data.R2Gn = data.numeric[, group.R2Gn]
+
+set.seed(42)
+opt.R2Gn = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.R2Gn.10 = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.R2Gn.5 = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.R2Gn.3 = optPenalty.kCVauto(Y = data.R2Gn, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.R2Gn = setNames(c(opt.R2Gn.3$optLambda, opt.R2Gn.5$optLambda, opt.R2Gn.10$optLambda, opt.R2Gn$optLambda), c(3,5,10,43))
+Lambdas.R2Gn
+```
+## C. miRNASeqGene
+
+```{r}
+data.mRSG = data.numeric[, group.mRSG]
+
+set.seed(42)
+opt.mRSG = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.mRSG.10 = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.mRSG.5 = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.mRSG.3 = optPenalty.kCVauto(Y = data.mRSG, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.mRSG = setNames(c(opt.mRSG.3$optLambda, opt.mRSG.5$optLambda, opt.mRSG.10$optLambda, opt.mRSG$optLambda), c(3,5,10,43))
+Lambdas.mRSG
+```
+
+## D. All data
+
+```{r}
+set.seed(42)
+opt.all = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.all.10 = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.all.5 = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.all.3 = optPenalty.kCVauto(Y = data.numeric, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.all = setNames(c(opt.all.3$optLambda, opt.all.5$optLambda, opt.all.10$optLambda, opt.all$optLambda), c(3,5,10,43))
+Lambdas.all
+```
+
+
+# 2. Split data into alive and dead
+## A. RPPAArray
+
+```{r}
+data.RPPA.alive = data.RPPA[which(data.Y == 0), ]
+data.RPPA.dead = data.RPPA[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.RPPA.alive = optPenalty.kCVauto(Y = data.RPPA.alive, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.RPPA.alive.10 = optPenalty.kCVauto(Y = data.RPPA.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.RPPA.alive.5 = optPenalty.kCVauto(Y = data.RPPA.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.RPPA.alive.3 = optPenalty.kCVauto(Y = data.RPPA.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+opt.RPPA.dead = optPenalty.kCVauto(Y = data.RPPA.dead, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.RPPA.dead.10 = optPenalty.kCVauto(Y = data.RPPA.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.RPPA.dead.5 = optPenalty.kCVauto(Y = data.RPPA.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.RPPA.dead.3 = optPenalty.kCVauto(Y = data.RPPA.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.RPPA.alive = setNames(c(opt.RPPA.alive.3$optLambda, opt.RPPA.alive.5$optLambda, opt.RPPA.alive.10$optLambda, opt.RPPA.alive$optLambda), c(3,5,10,43))
+Lambdas.RPPA.dead = setNames(c(opt.RPPA.dead.3$optLambda, opt.RPPA.dead.5$optLambda, opt.RPPA.dead.10$optLambda, opt.RPPA.dead$optLambda), c(3,5,10,43))
+
+Lambdas.RPPA.alive
+Lambdas.RPPA.dead
+```
+
+## B. RNASeq2GeneNorm
+
+
+```{r}
+data.R2Gn.alive = data.R2Gn[which(data.Y == 0), ]
+data.R2Gn.dead = data.R2Gn[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.R2Gn.alive = optPenalty.kCVauto(Y = data.R2Gn.alive, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.R2Gn.alive.10 = optPenalty.kCVauto(Y = data.R2Gn.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.R2Gn.alive.5 = optPenalty.kCVauto(Y = data.R2Gn.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.R2Gn.alive.3 = optPenalty.kCVauto(Y = data.R2Gn.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+opt.R2Gn.dead = optPenalty.kCVauto(Y = data.R2Gn.dead, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.R2Gn.dead.10 = optPenalty.kCVauto(Y = data.R2Gn.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.R2Gn.dead.5 = optPenalty.kCVauto(Y = data.R2Gn.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.R2Gn.dead.3 = optPenalty.kCVauto(Y = data.R2Gn.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.R2Gn.alive = setNames(c(opt.R2Gn.alive.3$optLambda, opt.R2Gn.alive.5$optLambda, opt.R2Gn.alive.10$optLambda, opt.R2Gn.alive$optLambda), c(3,5,10,43))
+Lambdas.R2Gn.dead = setNames(c(opt.R2Gn.dead.3$optLambda, opt.R2Gn.dead.5$optLambda, opt.R2Gn.dead.10$optLambda, opt.R2Gn.dead$optLambda), c(3,5,10,43))
+
+Lambdas.R2Gn.alive
+Lambdas.R2Gn.dead
+```
+
+## C. RPPA Array + RNASeq2GeneNorm
+
+```{r}
+data.PR = data.numeric[, c(group.RPPA, group.R2Gn)]
+
+data.PR.alive = data.PR[which(data.Y == 0), ]
+data.PR.dead = data.PR[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.PR.alive = optPenalty.kCVauto(Y = data.PR.alive, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.PR.alive.10 = optPenalty.kCVauto(Y = data.PR.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.PR.alive.5 = optPenalty.kCVauto(Y = data.PR.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.PR.alive.3 = optPenalty.kCVauto(Y = data.PR.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+opt.PR.dead = optPenalty.kCVauto(Y = data.PR.dead, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.PR.dead.10 = optPenalty.kCVauto(Y = data.PR.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.PR.dead.5 = optPenalty.kCVauto(Y = data.PR.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.PR.dead.3 = optPenalty.kCVauto(Y = data.PR.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.PR.alive = setNames(c(opt.PR.alive.3$optLambda, opt.PR.alive.5$optLambda, opt.PR.alive.10$optLambda, opt.PR.alive$optLambda), c(3,5,10,43))
+Lambdas.PR.dead = setNames(c(opt.PR.dead.3$optLambda, opt.PR.dead.5$optLambda, opt.PR.dead.10$optLambda, opt.PR.dead$optLambda), c(3,5,10,43))
+
+Lambdas.PR.alive
+Lambdas.PR.dead
+```
+
+## D. miRNASeqGene
+
+```{r}
+data.mRSG.alive = data.mRSG[which(data.Y == 0), ]
+data.mRSG.dead = data.mRSG[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.mRSG.alive = optPenalty.kCVauto(Y = data.mRSG.alive, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.mRSG.alive.10 = optPenalty.kCVauto(Y = data.mRSG.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.mRSG.alive.5 = optPenalty.kCVauto(Y = data.mRSG.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.mRSG.alive.3 = optPenalty.kCVauto(Y = data.mRSG.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+opt.mRSG.dead = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000) # optLambda maxs out for lambdaMax = 1000
+opt.mRSG.dead.10 = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.mRSG.dead.5 = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.mRSG.dead.3 = optPenalty.kCVauto(Y = data.mRSG.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.mRSG.alive = setNames(c(opt.mRSG.alive.3$optLambda, opt.mRSG.alive.5$optLambda, opt.mRSG.alive.10$optLambda, opt.mRSG.alive$optLambda), c(3,5,10,43))
+Lambdas.mRSG.dead = setNames(c(opt.mRSG.dead.3$optLambda, opt.mRSG.dead.5$optLambda, opt.mRSG.dead.10$optLambda, opt.mRSG.dead$optLambda), c(3,5,10,43))
+
+Lambdas.mRSG.alive
+Lambdas.mRSG.dead
+```
+
+## E. All Data
+
+```{r}
+data.all.alive = data.numeric[which(data.Y == 0), ]
+data.all.dead = data.numeric[which(data.Y == 1), ]
+```
+
+```{r}
+set.seed(42)
+opt.all.alive = optPenalty.kCVauto(Y = data.all.alive, lambdaMin = 1e-11, lambdaMax = 1000)
+opt.all.alive.10 = optPenalty.kCVauto(Y = data.all.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.all.alive.5 = optPenalty.kCVauto(Y = data.all.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.all.alive.3 = optPenalty.kCVauto(Y = data.all.alive, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+opt.all.dead = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000) # optLambda maxs out at lambdaMax = 1000
+opt.all.dead.10 = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 10)
+opt.all.dead.5 = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 5)
+opt.all.dead.3 = optPenalty.kCVauto(Y = data.all.dead, lambdaMin = 1e-11, lambdaMax = 1000, fold = 3)
+
+Lambdas.all.alive = setNames(c(opt.all.alive.3$optLambda, opt.all.alive.5$optLambda, opt.all.alive.10$optLambda, opt.all.alive$optLambda), c(3,5,10,43))
+Lambdas.all.dead = setNames(c(opt.all.dead.3$optLambda, opt.all.dead.5$optLambda, opt.all.dead.10$optLambda, opt.all.dead$optLambda), c(3,5,10,43))
+
+Lambdas.all.alive
+Lambdas.all.dead
+```
+
+# 3. Make a dataframe of all optLambda values and export it
+
+```{r}
+ggm.optLambdas = data.frame(c(3,5,10,43),
+                            Lambdas.RPPA,
+                            Lambdas.R2Gn,
+                            Lambdas.mRSG,
+                            Lambdas.all,
+                            Lambdas.RPPA.alive,
+                            Lambdas.RPPA.dead,
+                            Lambdas.R2Gn.alive,
+                            Lambdas.R2Gn.dead,
+                            Lambdas.PR.alive,
+                            Lambdas.PR.dead,
+                            Lambdas.mRSG.alive,
+                            Lambdas.mRSG.dead,
+                            Lambdas.all.alive,
+                            Lambdas.all.dead)
+ggm.optLambdas
+```
+
+```{r}
+saveRDS(ggm.optLambdas, file = "data/temp/ggm_all_optLambdas_lambdaMax1000.rds")
+```
+
