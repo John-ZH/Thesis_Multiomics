@@ -37,26 +37,72 @@ Y = data.horizontal$vital_status
 ```{r, fig.width=70, fig.height=10}
 x.mRSG = gt.matrix[, 1:470]
 gt.mRSG = covariates(gt(Y ~ x.mRSG, model = "logistic"),
-                     cluster = T, help.lines = T, alias = colnames(x.mRSG),
+                     cluster = F, help.lines = T, alias = colnames(x.mRSG),
                      cex.labels = 0.5, colors = c(2,3))
 ```
 ```{r, fig.width=20, fig.height=10}
 x.R2Gn = gt.matrix[, 471:668]
 gt.R2Gn = covariates(gt(Y ~ x.R2Gn, model = "logistic"),
-                     cluster = T, help.lines = T, alias = colnames(x.R2Gn),
+                     cluster = F, help.lines = T, alias = colnames(x.R2Gn),
                      cex.labels = 0.5, colors = c(2,3))
 ```
 ```{r, fig.width=15, fig.height=10}
 x.RPPA = gt.matrix[, 669:701]
 gt.RPPA = covariates(gt(Y ~ x.RPPA, model = "logistic"),
-                     cluster = T, help.lines = T, alias = colnames(x.RPPA),
+                     cluster = F, help.lines = T, alias = colnames(x.RPPA),
                      cex.labels = 0.7, colors = c(2,3))
 ```
 
-## A. Zoomed-in miRNASeqGene and RNASeq2GeneNorm
+## A. Zoomed-in miRNASeqGene and RNASeq2GeneNorm and compare all selections with selected features in glmnet and squeezy
 
 Since the plots for miRNASeqGene and RNASeq2GeneNorm contain too many variables,
 we will zoom in on the ones with the smallest p values.
+
+Both plots, as well as the full plot for RPPAArray features, will be compared with features selected in Glmnet and Squeezy.
+
+```{r}
+# Selects all overlapping features from
+merge.all.sel.features = function(featurelist){
+  out = c()
+  for (i in 1:length(featurelist)) {
+    for (j in 1:length(featurelist[[i]])) {
+      for (k in 1:length(featurelist[[i]][[j]])) {
+    out = c(out, names(featurelist[[i]][[j]][[k]]))
+      }
+    }
+  }
+  out.u = unique(out)
+  out.u
+}
+```
+
+```{r}
+logistic.glmnet.features = merge.all.sel.features(readRDS("data/sel_features/results_glmnet_coef.rds"))
+cox.glmnet.features = merge.all.sel.features(readRDS("data/sel_features/results_glmnet_cox_coef_1se.rds"))
+squeezy.features = merge.all.sel.features(readRDS("data/sel_features/results_squeezy_coef.rds"))
+```
+
+```{r}
+print(logistic.glmnet.features)
+sum(startsWith(logistic.glmnet.features, "hsa")) #mRSG Counts
+sum(endsWith(logistic.glmnet.features, "R2Gn")) #R2Gn Counts
+sum(endsWith(logistic.glmnet.features, "RPPA")) #RPPA Counts
+```
+
+```{r}
+print(cox.glmnet.features)
+sum(startsWith(cox.glmnet.features, "hsa")) #mRSG Counts
+sum(endsWith(cox.glmnet.features, "R2Gn")) #R2Gn Counts
+sum(endsWith(cox.glmnet.features, "RPPA")) #RPPA Counts
+```
+```{r}
+print(squeezy.features)
+sum(startsWith(squeezy.features, "hsa")) #mRSG Counts
+sum(endsWith(squeezy.features, "R2Gn")) #R2Gn Counts
+sum(endsWith(squeezy.features, "RPPA")) #RPPA Counts
+```
+
+
 
 ```{r}
 # Return the top most significant results from a Globaltest covariate object
@@ -78,18 +124,38 @@ get.significant.pvalues = function(gtcov, limit = 0.05, n = NA) {
 }
 ```
 
+
+```{r}
+# Add features selected from penalized regression to selected gtcov variables
+gtp.pr = function(gtcov, limit = 0.05, n = NA) {
+  gtp = get.significant.pvalues(gtcov, limit, n)
+  gtp$logistic.glmnet = as.numeric(gtp$var %in% logistic.glmnet.features) * 0.7
+  gtp$squeezy = as.numeric(gtp$var %in% squeezy.features) * 0.8
+  gtp$cox.glmnet = as.numeric(gtp$var %in% cox.glmnet.features) * 0.9
+  gtp$logistic.glmnet[gtp$logistic.glmnet == 0] = NA
+  gtp$squeezy[gtp$squeezy == 0] = NA
+  gtp$cox.glmnet[gtp$cox.glmnet == 0] = NA
+  gtp
+}
+```
+
 ```{r}
 # Manually visualize the dataframe selected from get.significant.pvalues
 # Optional: horizontal line drawing at selected p value.
 gtcov.manual = function(gtp, limit = NULL) {
-  p = ggplot(data = gtp, aes(x=var, y=log10(p.value), fill = direction)) +
+  p = ggplot(data = gtp, aes(x=reorder(var, p.value), y=log10(p.value), fill = direction)) +
     geom_bar(stat="identity", show.legend = T) + 
+    geom_text(aes(y=log10(logistic.glmnet)), label = "L", fontface = "bold") +
+    geom_text(aes(y=log10(squeezy)), label = "S", fontface = "bold") +
+    geom_text(aes(y=log10(cox.glmnet)), label = "C", fontface = "bold") +
     scale_y_reverse(labels = c(0.001, 0.01, 0.1, 1)) +
     scale_x_discrete(guide = guide_axis(angle = 90)) +
     #theme(axis.text.x=element_text(size=rel(0.5), angle=90)) +
     scale_fill_manual(values = c(3,2)) +
     #scale_y_log10()
-    ylab("p-value")
+    xlab("") +
+    ylab("p-value") +
+    theme_minimal()
   
   if (!is.null(limit)) {
     p = p + geom_hline(yintercept=log10(limit), linetype="dashed", 
@@ -99,6 +165,10 @@ gtcov.manual = function(gtp, limit = NULL) {
 }
 ```
 
+
+
+
+
 For miRNASeqGene, we plot all variables that correspond to a significant p value (<0.05).
 
 For RNASeq2GeneNorm, we plot the top 70 smallest p values (not all of them are significant).
@@ -106,9 +176,51 @@ For RNASeq2GeneNorm, we plot the top 70 smallest p values (not all of them are s
 The threashold alpha = 0.05 is plotted as a dashed black line.
 
 ```{r, fig.width=15, fig.height=10}
-gtcov.manual(get.significant.pvalues(gt.mRSG), limit = 0.05)
-gtcov.manual(get.significant.pvalues(gt.R2Gn, n = 70), limit = 0.05)
+gtcov.manual(gtp.pr(gt.mRSG), limit = 0.05)
+gtcov.manual(gtp.pr(gt.R2Gn, n = 70), limit = 0.05)
 ```
+
+```{r, fig.width=15, fig.height=10}
+p.value = limit = 0.05
+p = ggplot(data = gtp.pr(gt.RPPA, limit = 1), aes(x=reorder(var, p.value), y=log10(p.value), fill = direction)) +
+    geom_bar(stat="identity", show.legend = T) + 
+    geom_text(aes(y=log10(logistic.glmnet)), label = "L", fontface = "bold") +
+    geom_text(aes(y=log10(squeezy)), label = "S", fontface = "bold") +
+    geom_text(aes(y=log10(cox.glmnet)), label = "C", fontface = "bold") +
+    scale_y_reverse(labels = c(0.003, 0.01, 0.03, 0.1, 0.3, 1)) +
+    #scale_y_reverse() +
+    scale_x_discrete(guide = guide_axis(angle = 90)) +
+    #theme(axis.text.x=element_text(size=rel(0.5), angle=90)) +
+    scale_fill_manual(values = c(3,2)) +
+    #scale_y_log10()
+    xlab("") +
+    ylab("p-value") +
+    theme_minimal()
+  
+  if (!is.null(limit)) {
+    p = p + geom_hline(yintercept=log10(limit), linetype="dashed", 
+                color = "black")
+  }
+  p
+```
+
+### Report number of selected features per dataset
+
+```{r}
+table(gtp.pr(gt.mRSG)$logistic.glmnet)
+table(gtp.pr(gt.mRSG)$cox.glmnet)
+table(gtp.pr(gt.mRSG)$squeezy)
+
+table(gtp.pr(gt.R2Gn)$logistic.glmnet)
+table(gtp.pr(gt.R2Gn)$cox.glmnet)
+table(gtp.pr(gt.R2Gn)$squeezy)
+
+table(gtp.pr(gt.RPPA)$logistic.glmnet)
+table(gtp.pr(gt.RPPA)$cox.glmnet)
+table(gtp.pr(gt.RPPA)$squeezy)
+```
+
+
 
 ## B. Save significant (P <= 0.05) to external file
 
